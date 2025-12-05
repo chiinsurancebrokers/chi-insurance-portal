@@ -1,4 +1,5 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, Date, DateTime, ForeignKey, Enum
+import os
+from sqlalchemy import create_engine, Column, Integer, String, Float, Date, DateTime, ForeignKey, Enum as SQLEnum
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 from datetime import datetime
@@ -43,7 +44,7 @@ class Policy(Base):
     premium = Column(Float)
     start_date = Column(Date)
     expiration_date = Column(Date)
-    status = Column(Enum(PolicyStatus), default=PolicyStatus.ACTIVE)
+    status = Column(SQLEnum(PolicyStatus), default=PolicyStatus.ACTIVE)
     payment_code = Column(String(100))
     created_date = Column(DateTime, default=datetime.now)
     updated_date = Column(DateTime, default=datetime.now, onupdate=datetime.now)
@@ -57,7 +58,7 @@ class Payment(Base):
     amount = Column(Float, nullable=False)
     payment_date = Column(Date)
     due_date = Column(Date)
-    status = Column(Enum(PaymentStatus), default=PaymentStatus.PENDING)
+    status = Column(SQLEnum(PaymentStatus), default=PaymentStatus.PENDING)
     payment_method = Column(String(100))
     notes = Column(String(500))
     created_date = Column(DateTime, default=datetime.now)
@@ -74,13 +75,24 @@ class Document(Base):
     document_type = Column(String(100))
     upload_date = Column(DateTime, default=datetime.now)
 
-def init_db(database_url='sqlite:///data/database/chi_insurance.db'):
-    engine = create_engine(database_url, echo=False)
-    Base.metadata.create_all(engine)
-    Session = sessionmaker(bind=engine)
-    return engine, Session
+# Database connection - USE ENVIRONMENT VARIABLE!
+def get_database_url():
+    """Get database URL from environment or default to SQLite"""
+    db_url = os.getenv('DATABASE_URL')
+    
+    if db_url:
+        # Railway/Heroku use postgres:// but SQLAlchemy needs postgresql://
+        if db_url.startswith('postgres://'):
+            db_url = db_url.replace('postgres://', 'postgresql://', 1)
+        return db_url
+    
+    # Fallback to SQLite for local development
+    return 'sqlite:///data/database/chi_insurance.db'
 
-def get_session(database_url='sqlite:///data/database/chi_insurance.db'):
-    engine = create_engine(database_url, echo=False)
+def get_engine():
+    return create_engine(get_database_url())
+
+def get_session():
+    engine = get_engine()
     Session = sessionmaker(bind=engine)
     return Session()
