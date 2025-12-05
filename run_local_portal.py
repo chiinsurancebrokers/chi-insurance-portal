@@ -16,16 +16,149 @@ login_manager.login_message = 'Παρακαλώ συνδεθείτε για να
 from src.database.models import get_session, Client, Policy, Payment, PaymentStatus
 
 # FIXED: Correct client IDs
-# User accounts
+# User accounts - All clients with demo123 password
 USERS = {
     'alex-law@hotmail.com': {
         'password': generate_password_hash('demo123'),
         'client_id': 1  # ΑΛΕΞΟΠΟΥΛΟΣ ΓΕΩΡΓΙΟΣ
     },
+    'mpitsakoupolina@yahoo.gr': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 2  # ΜΠΙΤΣΑΚΟΥ ΠΟΛΥΤΙΜΗ ΠΑΝΑΓΙ
+    },
+    'apoTTapo@gmail.com': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 3  # ΑΠΟΣΤΟΛΟΥ ΚΩΝ/ΝΟΣ
+    },
+    'DAMIORDOESNTLIVE@hotmail.com': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 4  # ΜΑΜΜΗ ΕΙΡΗΝΗ
+    },
+    'voula.roukouna@sensorbeta.gr': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 5  # Client_voula.roukouna
+    },
+    'papadimitriou.vasilis@gmail.com': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 9  # ΠΑΠΑΔΗΜΗΤΡΙΟΥ ΒΑΣΙΛΕΙΟΣ
+    },
+    'GEORGE_SAXI@hotmail.com': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 10  # ΣΑΧΙΝΟΓΛΟΥ ΓΕΩΡΓΙΟΣ
+    },
+    'ioanna.myriokefalitaki@gmail.com': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 11  # ΜΥΡΙΟΚΕΦΑΛΙΤΑΚΗ ΙΩΑΝΝΑ
+    },
+    'charis_kouki@yahoo.gr': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 12  # ΚΟΥΚΗ ΧΑΡΙΚΛΕΙΑ
+    },
+    'apostolopoulos.i@pg.com': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 13  # ΑΠΟΣΤΟΛΟΠΟΥΛΟΣ ΙΩΑΝΝΗΣ
+    },
+    'dco@merit.gr': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 14  # ΟΥΤΟΠΟΥΛΟΣ ΔΗΜΗΤΡΙΟΣ
+    },
+    'marivilampou@hotmail.com': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 15  # ΛΑΜΠΟΥ ΜΑΡΙΑ - ΠΑΡΑΣΚΕΥΗ
+    },
+    'eboulakakis@yahoo.gr': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 16  # ΜΠΟΥΛΑΚΑΚΗΣ ΕΛΠΙΔΟΦΟΡΟΣ
+    },
+    'secretary@sensorbeta.gr': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 17  # SENSORBETA-ΑΝΤΙΚΛΕΠΤΙΚΑ ΣΥΣΤΗΜΑΤΑ ΑΕ
+    },
+    'spanos17@otenet.gr': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 18  # ΣΠΑΝΟΣ ΘΕΟΔΩΡΟΣ
+    },
+    'mkousoulakou@gmail.com': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 19  # ΚΟΥΣΟΥΛΑΚΟΥ ΜΑΡΙΑ
+    },
+    'gavriilidisioannis1@gmail.com': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 21  # ΓΑΒΡΙΗΛΙΔΗΣ ΙΩΑΝΝΗΣ
+    },
+    'asimakopoulouroul@gmail.com': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 22  # ΑΣΗΜΑΚΟΠΟΥΛΟΥ ΣΤΑΥΡΟΥΛΑ
+    },
+    'p.vernardakis@gmail.com': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 23  # ΒΕΡΝΑΡΔΑΚΗΣ ΠΑΝΑΓΙΩΤΗΣ
+    },
+    'manosalex73@gmail.com': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 24  # ΑΛΕΞΑΝΔΡΗΣ ΕΜΜΑΝΟΥΗΛ
+    },
+    'info@sroom.gr': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 25  # ΜΠΑΛΑΓΙΑΝΝΗ ΧΡΥΣΑΝΘΗ
+    },
+    'd.doulkeridis@gmail.com': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 26  # ΔΟΥΛΚΕΡΙΔΗΣ ΔΗΜΗΤΡΙΟΣ
+    },
+    'christ154ian@yahoo.com': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 27  # ΓΕΩΡΓΙΑΔΗΣ ΧΡΗΣΤΟΣ
+    },
+    'jojoxan@gmail.com': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 29  # ΝΙΚΟΛΑΡΑΣ ΝΙΚΟΛΑΟΣ
+    },
+    'EIRINIZLN@hotmail.com': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 30  # ΖΑΛΩΝΗ ΕΙΡΗΝΗ
+    },
+    'stavroulakormpaki@hotmail.com': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 31  # ΚΑΜΠΕΤΣΟΣ ΣΤΥΛΙΑΝΟΣ
+    },
+    'bezerianose@gmail.com': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 32  # ΜΠΕΖΕΡΙΑΝΟΣ ΕΥΑΓΓΕΛΟΣ
+    },
+    'micsot2@gmail.com': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 33  # ΣΩΤΗΡΙΟΥ ΝΙΚΟΛΑΟΣ
+    },
+    'drnkatsios@hotmail.com': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 34  # ΚΑΤΣΙΟΣ ΝΙΚΟΛΑΟΣ
+    },
+    'elentig@hotmail.com': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 35  # ΤΗΓΑΝΗ ΕΛΕΝΗ
+    },
+    'chourmousis@gmail.com': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 37  # ΧΟΥΡΜΟΥΣΗΣ ΔΗΜΗΤΡΙΟΣ
+    },
+    'mdetsi@gmail.com': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 38  # ΔΕΤΣΗ ΜΑΡΙΑ-ΕΛΕΝΗ
+    },
+    'logistirio1922@gmail.com': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 39  # ALTO ΕΠΙΧΕΙΡΗΜΑΤΙΚΕΣ ΛΥΣΕΙΣ ΤΡΟΦΟΔΟΣΙΑΣ
+    },
     'anna.xanthopoulou.c@gmail.com': {
         'password': generate_password_hash('demo123'),
         'client_id': 40  # ΞΑΝΘΟΠΟΥΛΟΥ ΑΝΝΑ
+    },
+    'kostisarvanitis@gmail.com': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 41  # ΑΡΒΑΝΙΤΗΣ ΚΩΝΣΤΑΝΤΙΝΟΣ
     }
+}
 }
 }
 
