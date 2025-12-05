@@ -15,27 +15,11 @@ login_manager.login_message = 'Παρακαλώ συνδεθείτε για να
 
 from src.database.models import get_session, Client, Policy, Payment, PaymentStatus
 
-# User accounts - UPDATED with correct IDs
+# FIXED: Correct client IDs
 USERS = {
     'alex-law@hotmail.com': {
         'password': generate_password_hash('demo123'),
         'client_id': 1  # ΑΛΕΞΟΠΟΥΛΟΣ ΓΕΩΡΓΙΟΣ
-    },
-    'mpitsakoupolina@yahoo.gr': {
-        'password': generate_password_hash('demo123'),
-        'client_id': 2  # ΜΠΙΤΣΑΚΟΥ ΠΟΛΥΤΙΜΗ
-    },
-    'voula.roukouna@sensorbeta.gr': {
-        'password': generate_password_hash('demo123'),
-        'client_id': 5  # SENSORBETA
-    },
-    'papadimitriou.vasilis@gmail.com': {
-        'password': generate_password_hash('demo123'),
-        'client_id': 9  # ΠΑΠΑΔΗΜΗΤΡΙΟΥ
-    },
-    'mkousoulakou@gmail.com': {
-        'password': generate_password_hash('demo123'),
-        'client_id': 19  # ΚΟΥΣΟΥΛΑΚΟΥ
     }
 }
 
@@ -95,8 +79,6 @@ def dashboard():
     active_policies = sum(1 for p in policies if p.status.value == 'ACTIVE')
     
     pending_payments = []
-    seen_payments = set()  # Track duplicates
-    
     for policy in policies:
         payment = db_session.query(Payment).filter_by(
             policy_id=policy.id,
@@ -104,17 +86,12 @@ def dashboard():
         ).first()
         
         if payment:
-            # Create unique key to avoid duplicates
-            payment_key = (policy.license_plate, payment.due_date, payment.amount)
-            
-            if payment_key not in seen_payments:
-                seen_payments.add(payment_key)
-                days_until = (payment.due_date - datetime.now().date()).days
-                pending_payments.append({
-                    'policy': policy,
-                    'payment': payment,
-                    'days_until': days_until
-                })
+            days_until = (payment.due_date - datetime.now().date()).days
+            pending_payments.append({
+                'policy': policy,
+                'payment': payment,
+                'days_until': days_until
+            })
     
     pending_payments.sort(key=lambda x: x['days_until'])
     
