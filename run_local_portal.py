@@ -16,11 +16,17 @@ login_manager.login_message = 'Παρακαλώ συνδεθείτε για να
 from src.database.models import get_session, Client, Policy, Payment, PaymentStatus
 
 # FIXED: Correct client IDs
+# User accounts
 USERS = {
     'alex-law@hotmail.com': {
         'password': generate_password_hash('demo123'),
         'client_id': 1  # ΑΛΕΞΟΠΟΥΛΟΣ ΓΕΩΡΓΙΟΣ
+    },
+    'anna.xanthopoulou.c@gmail.com': {
+        'password': generate_password_hash('demo123'),
+        'client_id': 40  # ΞΑΝΘΟΠΟΥΛΟΥ ΑΝΝΑ
     }
+}
 }
 
 class User(UserMixin):
