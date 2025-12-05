@@ -27,7 +27,6 @@ USERS = {
         'client_id': 40  # ΞΑΝΘΟΠΟΥΛΟΥ ΑΝΝΑ
     }
 }
-}
 
 class User(UserMixin):
     def __init__(self, email, client_id):
