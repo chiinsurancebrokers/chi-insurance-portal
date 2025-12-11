@@ -235,8 +235,19 @@ def admin_clients():
     else:
         clients = db_session.query(Client).order_by(Client.name).all()
     
+    # Load policy counts before closing session
+    clients_data = []
+    for client in clients:
+        clients_data.append({
+            'id': client.id,
+            'name': client.name,
+            'email': client.email,
+            'phone': client.phone,
+            'policy_count': len(client.policies)
+        })
+    
     db_session.close()
-    return render_template('admin/clients.html', clients=clients, search=search)
+    return render_template('admin/clients.html', clients=clients_data, search=search)
 
 @app.route('/admin/client/<int:client_id>')
 @admin_required

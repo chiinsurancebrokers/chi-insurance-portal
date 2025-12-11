@@ -45,7 +45,7 @@
                         <td>{{ client.name }}</td>
                         <td>{{ client.email or '-' }}</td>
                         <td>{{ client.phone or '-' }}</td>
-                        <td>{{ client.policies|length }}</td>
+                        <td>{{ client.policy_count }}</td>
                         <td>
                             <a href="/admin/client/{{ client.id }}" class="btn btn-sm btn-primary">View</a>
                         </td>
