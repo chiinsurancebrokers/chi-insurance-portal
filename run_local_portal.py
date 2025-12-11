@@ -361,6 +361,52 @@ def admin_delete_client(client_id):
     db_session.close()
     return redirect(url_for('admin_clients'))
 
+
+@app.route('/admin/payment/add', methods=['GET', 'POST'])
+@admin_required
+def admin_add_payment():
+    db_session = get_session()
+    
+    if request.method == 'POST':
+        payment = Payment(
+            policy_id=int(request.form.get('policy_id')),
+            amount=float(request.form.get('amount')),
+            due_date=datetime.strptime(request.form.get('due_date'), '%Y-%m-%d').date(),
+            status=PaymentStatus[request.form.get('status').upper()],
+            notes=request.form.get('notes')
+        )
+        
+        db_session.add(payment)
+        db_session.commit()
+        flash('Payment added successfully!', 'success')
+        db_session.close()
+        return redirect(url_for('admin_payments'))
+    
+    # GET: show form
+    clients = db_session.query(Client).order_by(Client.name).all()
+    client_id = request.args.get('client_id')
+    
+    policies = []
+    if client_id:
+        policies = db_session.query(Policy).filter_by(client_id=int(client_id)).all()
+    
+    db_session.close()
+    return render_template('admin/add_payment.html', clients=clients, policies=policies, client_id=client_id)
+
+@app.route('/admin/payment/<int:payment_id>/delete', methods=['POST'])
+@admin_required
+def admin_delete_payment(payment_id):
+    db_session = get_session()
+    payment = db_session.query(Payment).get(payment_id)
+    
+    if payment:
+        db_session.delete(payment)
+        db_session.commit()
+        flash('Payment deleted successfully!', 'success')
+    
+    db_session.close()
+    return redirect(url_for('admin_payments'))
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
