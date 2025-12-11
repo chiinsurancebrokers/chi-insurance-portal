@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+    <meta charset="UTF-8">
+    <title>Payments - CHI Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-danger">
+        <div class="container">
+            <a class="navbar-brand" href="/admin/dashboard"><i class="bi bi-shield-lock-fill"></i> CHI Admin Panel</a>
+            <div class="ms-auto">
+                <a href="/admin/dashboard" class="btn btn-light btn-sm me-2">Dashboard</a>
+                <a href="/logout" class="btn btn-light btn-sm">Logout</a>
+            </div>
+        </div>
+    </nav>
+    
+    <div class="container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>All Payments</h2>
+            <div class="btn-group">
+                <a href="/admin/payments?status=all" class="btn btn-sm btn-{{ 'primary' if status_filter == 'all' else 'outline-primary' }}">All</a>
+                <a href="/admin/payments?status=pending" class="btn btn-sm btn-{{ 'warning' if status_filter == 'pending' else 'outline-warning' }}">Pending</a>
+                <a href="/admin/payments?status=paid" class="btn btn-sm btn-{{ 'success' if status_filter == 'paid' else 'outline-success' }}">Paid</a>
+                <a href="/admin/payments?status=overdue" class="btn btn-sm btn-{{ 'danger' if status_filter == 'overdue' else 'outline-danger' }}">Overdue</a>
+            </div>
+        </div>
+        
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Client</th>
+                    <th>Policy</th>
+                    <th>Amount</th>
+                    <th>Due Date</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in payments %}
+                <tr>
+                    <td><a href="/admin/client/{{ item.client.id }}">{{ item.client.name }}</a></td>
+                    <td>{{ item.policy.policy_type }} - {{ item.policy.license_plate or '-' }}</td>
+                    <td>€{{ "%.2f"|format(item.payment.amount) }}</td>
+                    <td>{{ item.payment.due_date.strftime('%d/%m/%Y') if item.payment.due_date else '-' }}</td>
+                    <td>
+                        <span class="badge bg-{{ 'success' if item.payment.status.value == 'PAID' else 'warning' if item.payment.status.value == 'PENDING' else 'danger' }}">
+                            {{ item.payment.status.value }}
+                        </span>
+                    </td>
+                    <td>
+                        <form method="POST" action="/admin/payment/{{ item.payment.id }}/update" class="d-inline">
+                            <select name="status" class="form-select form-select-sm d-inline-block w-auto" onchange="this.form.submit()">
+                                <option value="PENDING" {% if item.payment.status.value == 'PENDING' %}selected{% endif %}>PENDING</option>
+                                <option value="PAID" {% if item.payment.status.value == 'PAID' %}selected{% endif %}>PAID</option>
+                                <option value="OVERDUE" {% if item.payment.status.value == 'OVERDUE' %}selected{% endif %}>OVERDUE</option>
+                            </select>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

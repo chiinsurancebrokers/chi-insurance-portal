@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, session
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
+from functools import wraps
 import os
 
 app = Flask(__name__, template_folder='app/templates')
@@ -11,31 +12,74 @@ app.secret_key = os.getenv('SECRET_KEY', 'chi-insurance-local-secret-2025')
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
-login_manager.login_message = 'Παρακαλώ συνδεθείτε για να δείτε αυτή τη σελίδα.'
 
-from src.database.models import get_session, Client, Policy, Payment, PaymentStatus
+from src.database.models import get_session, Client, Policy, Payment, PaymentStatus, PolicyStatus
 
-# FIXED: Correct client IDs
-# User accounts
+# Admin account
+ADMIN = {
+    'username': 'admin',
+    'password': generate_password_hash('CHIadmin2025!')
+}
+
+# Client accounts
 USERS = {
-    'alex-law@hotmail.com': {
-        'password': generate_password_hash('demo123'),
-        'client_id': 1  # ΑΛΕΞΟΠΟΥΛΟΣ ΓΕΩΡΓΙΟΣ
-    },
-    'anna.xanthopoulou.c@gmail.com': {
-        'password': generate_password_hash('demo123'),
-        'client_id': 40  # ΞΑΝΘΟΠΟΥΛΟΥ ΑΝΝΑ
-    }
+    'alex-law@hotmail.com': {'password': generate_password_hash('demo123'), 'client_id': 1},
+    'mpitsakoupolina@yahoo.gr': {'password': generate_password_hash('demo123'), 'client_id': 2},
+    'apoTTapo@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 3},
+    'DAMIORDOESNTLIVE@hotmail.com': {'password': generate_password_hash('demo123'), 'client_id': 4},
+    'voula.roukouna@sensorbeta.gr': {'password': generate_password_hash('demo123'), 'client_id': 5},
+    'papadimitriou.vasilis@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 9},
+    'GEORGE_SAXI@hotmail.com': {'password': generate_password_hash('demo123'), 'client_id': 10},
+    'ioanna.myriokefalitaki@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 11},
+    'charis_kouki@yahoo.gr': {'password': generate_password_hash('demo123'), 'client_id': 12},
+    'apostolopoulos.i@pg.com': {'password': generate_password_hash('demo123'), 'client_id': 13},
+    'dco@merit.gr': {'password': generate_password_hash('demo123'), 'client_id': 14},
+    'marivilampou@hotmail.com': {'password': generate_password_hash('demo123'), 'client_id': 15},
+    'eboulakakis@yahoo.gr': {'password': generate_password_hash('demo123'), 'client_id': 16},
+    'secretary@sensorbeta.gr': {'password': generate_password_hash('demo123'), 'client_id': 17},
+    'spanos17@otenet.gr': {'password': generate_password_hash('demo123'), 'client_id': 18},
+    'mkousoulakou@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 19},
+    'gavriilidisioannis1@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 21},
+    'asimakopoulouroul@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 22},
+    'p.vernardakis@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 23},
+    'manosalex73@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 24},
+    'info@sroom.gr': {'password': generate_password_hash('demo123'), 'client_id': 25},
+    'd.doulkeridis@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 26},
+    'christ154ian@yahoo.com': {'password': generate_password_hash('demo123'), 'client_id': 27},
+    'jojoxan@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 29},
+    'EIRINIZLN@hotmail.com': {'password': generate_password_hash('demo123'), 'client_id': 30},
+    'stavroulakormpaki@hotmail.com': {'password': generate_password_hash('demo123'), 'client_id': 31},
+    'bezerianose@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 32},
+    'micsot2@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 33},
+    'drnkatsios@hotmail.com': {'password': generate_password_hash('demo123'), 'client_id': 34},
+    'elentig@hotmail.com': {'password': generate_password_hash('demo123'), 'client_id': 35},
+    'chourmousis@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 37},
+    'mdetsi@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 38},
+    'logistirio1922@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 39},
+    'anna.xanthopoulou.c@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 40},
+    'kostisarvanitis@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 41}
 }
 
 class User(UserMixin):
-    def __init__(self, email, client_id):
+    def __init__(self, email, client_id=None, is_admin=False):
         self.id = email
         self.email = email
         self.client_id = client_id
+        self.is_admin = is_admin
+
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated or not current_user.is_admin:
+            flash('Access denied', 'danger')
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 @login_manager.user_loader
 def load_user(email):
+    if email == 'admin':
+        return User('admin', is_admin=True)
     if email in USERS:
         return User(email, USERS[email]['client_id'])
     return None
@@ -43,21 +87,30 @@ def load_user(email):
 @app.route('/')
 def index():
     if current_user.is_authenticated:
+        if current_user.is_admin:
+            return redirect(url_for('admin_dashboard'))
         return redirect(url_for('dashboard'))
     return redirect(url_for('login'))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        email = request.form.get('email')
+        username = request.form.get('email')
         password = request.form.get('password')
         
-        if email in USERS and check_password_hash(USERS[email]['password'], password):
-            user = User(email, USERS[email]['client_id'])
+        # Check admin
+        if username == ADMIN['username'] and check_password_hash(ADMIN['password'], password):
+            user = User('admin', is_admin=True)
+            login_user(user)
+            return redirect(url_for('admin_dashboard'))
+        
+        # Check client
+        if username in USERS and check_password_hash(USERS[username]['password'], password):
+            user = User(username, USERS[username]['client_id'])
             login_user(user)
             return redirect(url_for('dashboard'))
-        else:
-            flash('Λάθος email ή κωδικός', 'danger')
+        
+        flash('Λάθος στοιχεία σύνδεσης', 'danger')
     
     return render_template('login.html')
 
@@ -67,9 +120,13 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
+# CLIENT ROUTES
 @app.route('/dashboard')
 @login_required
 def dashboard():
+    if current_user.is_admin:
+        return redirect(url_for('admin_dashboard'))
+    
     db_session = get_session()
     client = db_session.query(Client).get(current_user.client_id)
     
@@ -136,6 +193,107 @@ def payments():
     
     db_session.close()
     return render_template('payments.html', payments=all_payments, client=client)
+
+# ADMIN ROUTES
+@app.route('/admin/dashboard')
+@admin_required
+def admin_dashboard():
+    db_session = get_session()
+    
+    total_clients = db_session.query(Client).count()
+    total_policies = db_session.query(Policy).count()
+    active_policies = db_session.query(Policy).filter_by(status=PolicyStatus.ACTIVE).count()
+    
+    pending_payments = db_session.query(Payment).filter_by(status=PaymentStatus.PENDING).count()
+    paid_payments = db_session.query(Payment).filter_by(status=PaymentStatus.PAID).count()
+    overdue_payments = db_session.query(Payment).filter_by(status=PaymentStatus.OVERDUE).count()
+    
+    recent_clients = db_session.query(Client).order_by(Client.created_date.desc()).limit(5).all()
+    
+    db_session.close()
+    
+    return render_template('admin/dashboard.html',
+                         total_clients=total_clients,
+                         total_policies=total_policies,
+                         active_policies=active_policies,
+                         pending_payments=pending_payments,
+                         paid_payments=paid_payments,
+                         overdue_payments=overdue_payments,
+                         recent_clients=recent_clients)
+
+@app.route('/admin/clients')
+@admin_required
+def admin_clients():
+    db_session = get_session()
+    search = request.args.get('search', '')
+    
+    if search:
+        clients = db_session.query(Client).filter(
+            (Client.name.like(f'%{search}%')) | 
+            (Client.email.like(f'%{search}%'))
+        ).all()
+    else:
+        clients = db_session.query(Client).order_by(Client.name).all()
+    
+    db_session.close()
+    return render_template('admin/clients.html', clients=clients, search=search)
+
+@app.route('/admin/client/<int:client_id>')
+@admin_required
+def admin_client_detail(client_id):
+    db_session = get_session()
+    client = db_session.query(Client).get(client_id)
+    policies = db_session.query(Policy).filter_by(client_id=client_id).all()
+    
+    all_payments = []
+    for policy in policies:
+        for payment in policy.payments:
+            all_payments.append({'policy': policy, 'payment': payment})
+    
+    db_session.close()
+    return render_template('admin/client_detail.html', client=client, policies=policies, payments=all_payments)
+
+@app.route('/admin/payments')
+@admin_required
+def admin_payments():
+    db_session = get_session()
+    status_filter = request.args.get('status', 'all')
+    
+    if status_filter == 'all':
+        payments = db_session.query(Payment).order_by(Payment.due_date.desc()).all()
+    else:
+        payments = db_session.query(Payment).filter_by(status=PaymentStatus[status_filter.upper()]).order_by(Payment.due_date.desc()).all()
+    
+    payment_list = []
+    for payment in payments:
+        policy = db_session.query(Policy).get(payment.policy_id)
+        client = db_session.query(Client).get(policy.client_id)
+        payment_list.append({
+            'payment': payment,
+            'policy': policy,
+            'client': client
+        })
+    
+    db_session.close()
+    return render_template('admin/payments.html', payments=payment_list, status_filter=status_filter)
+
+@app.route('/admin/payment/<int:payment_id>/update', methods=['POST'])
+@admin_required
+def admin_update_payment(payment_id):
+    new_status = request.form.get('status')
+    
+    db_session = get_session()
+    payment = db_session.query(Payment).get(payment_id)
+    
+    if payment:
+        payment.status = PaymentStatus[new_status.upper()]
+        if new_status.upper() == 'PAID':
+            payment.payment_date = datetime.now().date()
+        db_session.commit()
+        flash(f'Payment status updated to {new_status}', 'success')
+    
+    db_session.close()
+    return redirect(request.referrer or url_for('admin_payments'))
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
