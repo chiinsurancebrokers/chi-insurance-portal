@@ -20,11 +20,27 @@
     <div class="container mt-4">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h2>All Clients ({{ clients|length }})</h2>
-            <form method="GET" class="d-flex">
-                <input type="text" name="search" class="form-control me-2" placeholder="Search..." value="{{ search }}">
-                <button type="submit" class="btn btn-primary">Search</button>
-            </form>
+            <div class="d-flex gap-2">
+                <form method="GET" class="d-flex">
+                    <input type="text" name="search" class="form-control me-2" placeholder="Search..." value="{{ search }}">
+                    <button type="submit" class="btn btn-primary">Search</button>
+                </form>
+                <a href="/admin/client/add" class="btn btn-success">
+                    <i class="bi bi-plus-circle"></i> Add Client
+                </a>
+            </div>
         </div>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
         
         <div class="table-responsive">
             <table class="table table-hover">
@@ -48,6 +64,8 @@
                         <td>{{ client.policy_count }}</td>
                         <td>
                             <a href="/admin/client/{{ client.id }}" class="btn btn-sm btn-primary">View</a>
+                            <button class="btn btn-sm btn-danger" onclick="if(confirm('Delete {{ client.name }}?')) { document.getElementById('delete-{{ client.id }}').submit(); }">Delete</button>
+                            <form id="delete-{{ client.id }}" method="POST" action="/admin/client/{{ client.id }}/delete" style="display:none;"></form>
                         </td>
                     </tr>
                     {% endfor %}
@@ -55,5 +73,6 @@
             </table>
         </div>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

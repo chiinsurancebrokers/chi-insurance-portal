@@ -275,15 +275,24 @@ def admin_payments():
     else:
         payments = db_session.query(Payment).filter_by(status=PaymentStatus[status_filter.upper()]).order_by(Payment.due_date.desc()).all()
     
+    # Remove duplicates: group by client_id + policy_type + amount + due_date
+    seen = set()
     payment_list = []
+    
     for payment in payments:
         policy = db_session.query(Policy).get(payment.policy_id)
         client = db_session.query(Client).get(policy.client_id)
-        payment_list.append({
-            'payment': payment,
-            'policy': policy,
-            'client': client
-        })
+        
+        # Create unique key
+        key = (client.id, policy.policy_type, round(payment.amount, 2) if payment.amount else 0, payment.due_date)
+        
+        if key not in seen:
+            seen.add(key)
+            payment_list.append({
+                'payment': payment,
+                'policy': policy,
+                'client': client
+            })
     
     db_session.close()
     return render_template('admin/payments.html', payments=payment_list, status_filter=status_filter)
@@ -305,6 +314,52 @@ def admin_update_payment(payment_id):
     
     db_session.close()
     return redirect(request.referrer or url_for('admin_payments'))
+
+
+@app.route('/admin/client/add', methods=['GET', 'POST'])
+@admin_required
+def admin_add_client():
+    if request.method == 'POST':
+        db_session = get_session()
+        
+        client = Client(
+            name=request.form.get('name'),
+            email=request.form.get('email'),
+            phone=request.form.get('phone'),
+            address=request.form.get('address'),
+            postal_code=request.form.get('postal_code'),
+            city=request.form.get('city'),
+            tax_id=request.form.get('tax_id')
+        )
+        
+        db_session.add(client)
+        db_session.commit()
+        flash(f'Client {client.name} added successfully!', 'success')
+        db_session.close()
+        return redirect(url_for('admin_clients'))
+    
+    return render_template('admin/add_client.html')
+
+@app.route('/admin/client/<int:client_id>/delete', methods=['POST'])
+@admin_required
+def admin_delete_client(client_id):
+    db_session = get_session()
+    client = db_session.query(Client).get(client_id)
+    
+    if client:
+        # Delete all policies and payments
+        for policy in client.policies:
+            for payment in policy.payments:
+                db_session.delete(payment)
+            db_session.delete(policy)
+        
+        name = client.name
+        db_session.delete(client)
+        db_session.commit()
+        flash(f'Client {name} deleted successfully!', 'success')
+    
+    db_session.close()
+    return redirect(url_for('admin_clients'))
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
