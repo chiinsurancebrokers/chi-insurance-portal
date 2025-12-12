@@ -87,7 +87,7 @@
                     <div class="card-body text-center">
                         <i class="bi bi-envelope" style="font-size: 3rem;"></i>
                         <h5 class="mt-3">Send Renewals</h5>
-                        <a href="/admin/renewals" class="btn btn-primary mt-2">Send Renewals</a>
+                        <a href="#" class="btn btn-primary mt-2">Coming Soon</a>
                     </div>
                 </div>
             </div>

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+    <meta charset="UTF-8">
+    <title>Preview Renewal Emails - CHI Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-danger">
+        <div class="container">
+            <a class="navbar-brand" href="/admin/dashboard"><i class="bi bi-shield-lock-fill"></i> CHI Admin Panel</a>
+            <div class="ms-auto">
+                <a href="/admin/renewals" class="btn btn-light btn-sm me-2">Back</a>
+                <a href="/logout" class="btn btn-light btn-sm">Logout</a>
+            </div>
+        </div>
+    </nav>
+    
+    <div class="container mt-4">
+        <h2><i class="bi bi-eye"></i> Preview Renewal Emails</h2>
+        <p class="text-muted">Review emails before sending ({{ previews|length }} selected)</p>
+        
+        <form method="POST" action="/admin/renewals/send">
+            {% for preview in previews %}
+            <input type="hidden" name="selected" value="{{ preview.policy_id }}">
+            
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <strong>{{ preview.client.name }}</strong> 
+                    ({{ preview.client.email }}) 
+                    <span class="badge bg-light text-dark">{{ preview.language|upper }}</span>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <strong>Policy:</strong> {{ preview.policy.policy_type }}
+                        {% if preview.policy.license_plate %}
+                        | <strong>Plate:</strong> {{ preview.policy.license_plate }}
+                        {% endif %}
+                        | <strong>Amount:</strong> €{{ "%.2f"|format(preview.payment.amount) }}
+                    </div>
+                    <hr>
+                    <div class="border p-3 bg-light">
+                        {{ preview.email_body|safe }}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            
+            <div class="d-flex gap-2 mb-4">
+                <button type="submit" class="btn btn-success btn-lg">
+                    <i class="bi bi-send"></i> Send {{ previews|length }} Email{{ 's' if previews|length > 1 else '' }}
+                </button>
+                <a href="/admin/renewals" class="btn btn-secondary btn-lg">
+                    <i class="bi bi-x-circle"></i> Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
