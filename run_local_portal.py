@@ -438,7 +438,6 @@ def admin_edit_client(client_id):
 
 
 @app.route('/admin/client/<int:client_id>/edit', methods=['GET', 'POST'])
-@admin_required
 def admin_edit_client(client_id):
     db_session = get_session()
     client = db_session.query(Client).get(client_id)
