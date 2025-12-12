@@ -34,18 +34,18 @@
         
         {% if renewals %}
         <form method="POST" id="renewalForm">
-            <div class="d-flex justify-content-between mb-3">
+            <div class="d-flex justify-content-between mb-3 align-items-center">
                 <div>
-                    <button type="button" class="btn btn-sm btn-secondary" onclick="document.querySelectorAll('input[type=checkbox]').forEach(el => el.checked = true)">
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="selectAll()">
                         Select All
                     </button>
-                    <button type="button" class="btn btn-sm btn-secondary" onclick="document.querySelectorAll('input[type=checkbox]').forEach(el => el.checked = false)">
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="deselectAll()">
                         Deselect All
                     </button>
-                    <span class="ms-3 text-muted" id="selectedCount">0 selected</span>
+                    <span class="ms-3 badge bg-info" id="selectedCount">0 selected</span>
                 </div>
                 <div>
-                    <button type="submit" formaction="/admin/renewals/preview" class="btn btn-primary">
+                    <button type="submit" formaction="/admin/renewals/preview" class="btn btn-primary" onclick="saveSelections()">
                         <i class="bi bi-eye"></i> Preview Selected
                     </button>
                     <button type="button" class="btn btn-success" onclick="confirmSend()">
@@ -55,33 +55,34 @@
             </div>
             
             <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
+                <table class="table table-hover table-sm">
+                    <thead class="table-dark">
                         <tr>
-                            <th><input type="checkbox" id="selectAllCheckbox" onclick="toggleAll(this)"></th>
+                            <th style="width: 40px;"><input type="checkbox" id="selectAllCheckbox" onclick="toggleAll(this)"></th>
                             <th>Client</th>
                             <th>Email</th>
                             <th>Policy</th>
                             <th>License Plate</th>
                             <th>Amount</th>
                             <th>Expires</th>
-                            <th>Days Left</th>
+                            <th style="width: 100px;">Days Left</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for item in renewals %}
-                        <tr class="{% if item.days_until <= 7 %}table-warning{% endif %}">
+                        <tr class="{% if item.days_until <= 7 %}table-warning{% elif item.days_until <= 2 %}table-danger{% endif %}">
                             <td>
                                 <input type="checkbox" name="selected" value="{{ item.policy.id }}" 
+                                       class="policy-checkbox"
                                        {% if item.client.email %}checked{% else %}disabled{% endif %}
                                        onchange="updateCount()">
                             </td>
                             <td>{{ item.client.name }}</td>
                             <td>
                                 {% if item.client.email %}
-                                    {{ item.client.email }}
+                                    <small>{{ item.client.email }}</small>
                                 {% else %}
-                                    <span class="text-danger">No email</span>
+                                    <span class="text-danger"><small>No email</small></span>
                                 {% endif %}
                             </td>
                             <td>{{ item.policy.policy_type }}</td>
@@ -89,7 +90,7 @@
                             <td>€{{ "%.2f"|format(item.payment.amount) }}</td>
                             <td>{{ item.payment.due_date.strftime('%d/%m/%Y') }}</td>
                             <td>
-                                <span class="badge bg-{{ 'danger' if item.days_until <= 7 else 'warning' if item.days_until <= 14 else 'info' }}">
+                                <span class="badge bg-{{ 'danger' if item.days_until <= 2 else 'warning' if item.days_until <= 7 else 'info' if item.days_until <= 14 else 'secondary' }}">
                                     {{ item.days_until }} days
                                 </span>
                             </td>
@@ -108,6 +109,42 @@
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // Restore selections from sessionStorage
+        window.addEventListener('DOMContentLoaded', function() {
+            const saved = sessionStorage.getItem('renewalSelections');
+            if (saved) {
+                const selections = JSON.parse(saved);
+                document.querySelectorAll('input[name=selected]').forEach(checkbox => {
+                    if (selections.includes(checkbox.value)) {
+                        checkbox.checked = true;
+                    }
+                });
+            }
+            updateCount();
+        });
+        
+        function saveSelections() {
+            const selected = Array.from(document.querySelectorAll('input[name=selected]:checked'))
+                .map(cb => cb.value);
+            sessionStorage.setItem('renewalSelections', JSON.stringify(selected));
+        }
+        
+        function selectAll() {
+            document.querySelectorAll('input[name=selected]:not(:disabled)').forEach(el => {
+                el.checked = true;
+            });
+            document.getElementById('selectAllCheckbox').checked = true;
+            updateCount();
+        }
+        
+        function deselectAll() {
+            document.querySelectorAll('input[name=selected]').forEach(el => {
+                el.checked = false;
+            });
+            document.getElementById('selectAllCheckbox').checked = false;
+            updateCount();
+        }
+        
         function toggleAll(checkbox) {
             document.querySelectorAll('input[name=selected]:not(:disabled)').forEach(el => {
                 el.checked = checkbox.checked;
@@ -127,15 +164,13 @@
                 return;
             }
             
-            if (confirm(`Send renewal emails to ${selected.length} client(s)?`)) {
+            if (confirm(`Send renewal emails to ${selected.length} client(s)?\n\nThis will send emails immediately.`)) {
+                saveSelections();
                 const form = document.getElementById('renewalForm');
                 form.action = '/admin/renewals/send';
                 form.submit();
             }
         }
-        
-        // Initialize count on page load
-        updateCount();
     </script>
 </body>
 </html>

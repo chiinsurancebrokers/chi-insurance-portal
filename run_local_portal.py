@@ -415,26 +415,28 @@ def admin_delete_payment(payment_id):
 def admin_renewals():
     db_session = get_session()
     from datetime import timedelta
+    from sqlalchemy.orm import joinedload
+    
     today = datetime.now().date()
     thirty_days = today + timedelta(days=30)
     
-    policies = db_session.query(Policy).filter(
+    # Optimized query with joins
+    policies = db_session.query(Policy).join(Client).outerjoin(Payment).filter(
         Policy.expiration_date.between(today, thirty_days),
-        Policy.status == PolicyStatus.ACTIVE
+        Policy.status == PolicyStatus.ACTIVE,
+        Payment.status == PaymentStatus.PENDING
+    ).options(
+        joinedload(Policy.client),
+        joinedload(Policy.payments)
     ).order_by(Policy.expiration_date).all()
     
     renewal_list = []
     for policy in policies:
-        client = db_session.query(Client).get(policy.client_id)
-        payment = db_session.query(Payment).filter_by(
-            policy_id=policy.id,
-            status=PaymentStatus.PENDING
-        ).first()
-        
-        if client and payment:
+        payment = next((p for p in policy.payments if p.status == PaymentStatus.PENDING), None)
+        if policy.client and payment:
             days_until = (policy.expiration_date - today).days
             renewal_list.append({
-                'client': client,
+                'client': policy.client,
                 'policy': policy,
                 'payment': payment,
                 'days_until': days_until
