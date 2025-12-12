@@ -409,6 +409,192 @@ def admin_delete_payment(payment_id):
 
 
 
+
+@app.route('/admin/renewals')
+@admin_required
+def admin_renewals():
+    db_session = get_session()
+    from datetime import timedelta
+    today = datetime.now().date()
+    thirty_days = today + timedelta(days=30)
+    
+    policies = db_session.query(Policy).filter(
+        Policy.expiration_date.between(today, thirty_days),
+        Policy.status == PolicyStatus.ACTIVE
+    ).order_by(Policy.expiration_date).all()
+    
+    renewal_list = []
+    for policy in policies:
+        client = db_session.query(Client).get(policy.client_id)
+        payment = db_session.query(Payment).filter_by(
+            policy_id=policy.id,
+            status=PaymentStatus.PENDING
+        ).first()
+        
+        if client and payment:
+            days_until = (policy.expiration_date - today).days
+            renewal_list.append({
+                'client': client,
+                'policy': policy,
+                'payment': payment,
+                'days_until': days_until
+            })
+    
+    db_session.close()
+    return render_template('admin/renewals.html', renewals=renewal_list)
+
+@app.route('/admin/renewals/preview', methods=['POST'])
+@admin_required
+def admin_renewals_preview():
+    selected_ids = request.form.getlist('selected')
+    
+    if not selected_ids:
+        flash('No clients selected', 'warning')
+        return redirect(url_for('admin_renewals'))
+    
+    db_session = get_session()
+    previews = []
+    
+    for policy_id in selected_ids:
+        policy = db_session.query(Policy).get(int(policy_id))
+        if not policy:
+            continue
+            
+        client = db_session.query(Client).get(policy.client_id)
+        payment = db_session.query(Payment).filter_by(
+            policy_id=policy.id,
+            status=PaymentStatus.PENDING
+        ).first()
+        
+        if client and payment:
+            has_greek = any(ord(char) > 127 for char in client.name)
+            language = 'el' if has_greek else 'en'
+            email_body = generate_email_body(client, policy, payment, language)
+            
+            previews.append({
+                'policy_id': policy.id,
+                'client': client,
+                'policy': policy,
+                'payment': payment,
+                'language': language,
+                'email_body': email_body
+            })
+    
+    db_session.close()
+    return render_template('admin/renewals_preview.html', previews=previews)
+
+@app.route('/admin/renewals/send', methods=['POST'])
+@admin_required
+def admin_renewals_send():
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    
+    selected_ids = request.form.getlist('selected')
+    
+    if not selected_ids:
+        flash('No emails selected', 'warning')
+        return redirect(url_for('admin_renewals'))
+    
+    SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
+    SMTP_PORT = int(os.getenv('SMTP_PORT', 587))
+    SMTP_USER = os.getenv('SMTP_USER', 'xiatropoulos@gmail.com')
+    SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', '')
+    
+    if not SMTP_PASSWORD:
+        flash('Email not configured. Set SMTP_PASSWORD in Railway.', 'danger')
+        return redirect(url_for('admin_renewals'))
+    
+    db_session = get_session()
+    sent_count = 0
+    failed = []
+    
+    try:
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server.starttls()
+        server.login(SMTP_USER, SMTP_PASSWORD)
+        
+        for policy_id in selected_ids:
+            policy = db_session.query(Policy).get(int(policy_id))
+            if not policy:
+                continue
+                
+            client = db_session.query(Client).get(policy.client_id)
+            payment = db_session.query(Payment).filter_by(
+                policy_id=policy.id,
+                status=PaymentStatus.PENDING
+            ).first()
+            
+            if not client or not client.email or not payment:
+                failed.append(f"{client.name if client else 'Unknown'}")
+                continue
+            
+            has_greek = any(ord(char) > 127 for char in client.name)
+            language = 'el' if has_greek else 'en'
+            
+            msg = MIMEMultipart('alternative')
+            msg['From'] = SMTP_USER
+            msg['To'] = client.email
+            msg['Subject'] = f"Ανανέωση Ασφάλειας - {policy.policy_type}" if language == 'el' else f"Insurance Renewal - {policy.policy_type}"
+            
+            email_body = generate_email_body(client, policy, payment, language)
+            msg.attach(MIMEText(email_body, 'html', 'utf-8'))
+            
+            try:
+                server.send_message(msg)
+                sent_count += 1
+            except Exception as e:
+                failed.append(f"{client.name}")
+        
+        server.quit()
+        
+    except Exception as e:
+        flash(f'Email error: {str(e)}', 'danger')
+        db_session.close()
+        return redirect(url_for('admin_renewals'))
+    
+    db_session.close()
+    
+    if sent_count > 0:
+        flash(f'Sent {sent_count} emails!', 'success')
+    if failed:
+        flash(f'Failed: {", ".join(failed)}', 'warning')
+    
+    return redirect(url_for('admin_renewals'))
+
+def generate_email_body(client, policy, payment, language):
+    if language == 'el':
+        return f"""<html><body style="font-family: Arial, sans-serif;">
+        <h2>Αγαπητή/έ {client.name},</h2>
+        <p>Η ασφάλειά σας <strong>{policy.policy_type}</strong> 
+        {'με πινακίδα <strong>' + policy.license_plate + '</strong>' if policy.license_plate else ''} 
+        λήγει στις <strong>{payment.due_date.strftime('%d/%m/%Y')}</strong>.</p>
+        <h3>Στοιχεία:</h3>
+        <ul>
+        <li>Τύπος: {policy.policy_type}</li>
+        {'<li>Πινακίδα: ' + policy.license_plate + '</li>' if policy.license_plate else ''}
+        <li>Ποσό: €{payment.amount:.2f}</li>
+        <li>Λήξη: {payment.due_date.strftime('%d/%m/%Y')}</li>
+        </ul>
+        <p>Με εκτίμηση,<br><strong>CHI Insurance Brokers</strong></p>
+        </body></html>"""
+    else:
+        return f"""<html><body style="font-family: Arial, sans-serif;">
+        <h2>Dear {client.name},</h2>
+        <p>Your <strong>{policy.policy_type}</strong> insurance 
+        {'with plate <strong>' + policy.license_plate + '</strong>' if policy.license_plate else ''} 
+        expires on <strong>{payment.due_date.strftime('%d/%m/%Y')}</strong>.</p>
+        <h3>Details:</h3>
+        <ul>
+        <li>Type: {policy.policy_type}</li>
+        {'<li>Plate: ' + policy.license_plate + '</li>' if policy.license_plate else ''}
+        <li>Amount: €{payment.amount:.2f}</li>
+        <li>Expiration: {payment.due_date.strftime('%d/%m/%Y')}</li>
+        </ul>
+        <p>Best regards,<br><strong>CHI Insurance Brokers</strong></p>
+        </body></html>"""
+
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
