@@ -408,6 +408,11 @@ def admin_delete_payment(payment_id):
     return redirect(url_for('admin_payments'))
 
 
+
+if __name__ == '__main__':
+    port = int(os.getenv('PORT', 5000))
+    app.run(debug=False, host='0.0.0.0', port=port)
+
 @app.route('/admin/client/<int:client_id>/edit', methods=['GET', 'POST'])
 @admin_required
 def admin_edit_client(client_id):
@@ -436,34 +441,3 @@ def admin_edit_client(client_id):
     db_session.close()
     return render_template('admin/edit_client.html', client=client)
 
-
-@app.route('/admin/client/<int:client_id>/edit', methods=['GET', 'POST'])
-def admin_edit_client(client_id):
-    db_session = get_session()
-    client = db_session.query(Client).get(client_id)
-    
-    if not client:
-        flash('Client not found', 'danger')
-        db_session.close()
-        return redirect(url_for('admin_clients'))
-    
-    if request.method == 'POST':
-        client.name = request.form.get('name')
-        client.email = request.form.get('email')
-        client.phone = request.form.get('phone')
-        client.address = request.form.get('address')
-        client.postal_code = request.form.get('postal_code')
-        client.city = request.form.get('city')
-        client.tax_id = request.form.get('tax_id')
-        
-        db_session.commit()
-        flash(f'Client {client.name} updated successfully!', 'success')
-        db_session.close()
-        return redirect(url_for('admin_client_detail', client_id=client_id))
-    
-    db_session.close()
-    return render_template('admin/edit_client.html', client=client)
-
-if __name__ == '__main__':
-    port = int(os.getenv('PORT', 5000))
-    app.run(debug=False, host='0.0.0.0', port=port)
