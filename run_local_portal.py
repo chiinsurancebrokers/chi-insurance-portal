@@ -413,37 +413,44 @@ def admin_delete_payment(payment_id):
 @app.route('/admin/renewals')
 @admin_required
 def admin_renewals():
-    db_session = get_session()
     from datetime import timedelta
-    from sqlalchemy.orm import joinedload
+    db_session = get_session()
     
-    today = datetime.now().date()
-    thirty_days = today + timedelta(days=30)
-    
-    # Optimized query with joins
-    policies = db_session.query(Policy).join(Client).outerjoin(Payment).filter(
-        Policy.expiration_date.between(today, thirty_days),
-        Policy.status == PolicyStatus.ACTIVE,
-        Payment.status == PaymentStatus.PENDING
-    ).options(
-        joinedload(Policy.client),
-        joinedload(Policy.payments)
-    ).order_by(Policy.expiration_date).all()
-    
-    renewal_list = []
-    for policy in policies:
-        payment = next((p for p in policy.payments if p.status == PaymentStatus.PENDING), None)
-        if policy.client and payment:
-            days_until = (policy.expiration_date - today).days
-            renewal_list.append({
-                'client': policy.client,
-                'policy': policy,
-                'payment': payment,
-                'days_until': days_until
-            })
-    
-    db_session.close()
-    return render_template('admin/renewals.html', renewals=renewal_list)
+    try:
+        today = datetime.now().date()
+        thirty_days = today + timedelta(days=30)
+        
+        policies = db_session.query(Policy).filter(
+            Policy.expiration_date.between(today, thirty_days),
+            Policy.status == PolicyStatus.ACTIVE
+        ).order_by(Policy.expiration_date).all()
+        
+        renewal_list = []
+        for policy in policies:
+            try:
+                client = policy.client
+                if not client or not client.email:
+                    continue
+                
+                payment = db_session.query(Payment).filter_by(
+                    policy_id=policy.id,
+                    status=PaymentStatus.PENDING
+                ).first()
+                
+                if payment:
+                    days_until = (policy.expiration_date - today).days
+                    renewal_list.append({
+                        'client': client,
+                        'policy': policy,
+                        'payment': payment,
+                        'days_until': days_until
+                    })
+            except Exception:
+                continue
+        
+        return render_template('admin/renewals.html', renewals=renewal_list)
+    finally:
+        db_session.close()
 
 @app.route('/admin/renewals/preview', methods=['POST'])
 @admin_required
