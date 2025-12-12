@@ -563,38 +563,98 @@ def admin_renewals_send():
     return redirect(url_for('admin_renewals'))
 
 def generate_email_body(client, policy, payment, language):
+    days_until = (payment.due_date - datetime.now().date()).days
+    
     if language == 'el':
-        return f"""<html><body style="font-family: Arial, sans-serif;">
-        <h2>Αγαπητή/έ {client.name},</h2>
-        <p>Η ασφάλειά σας <strong>{policy.policy_type}</strong> 
-        {'με πινακίδα <strong>' + policy.license_plate + '</strong>' if policy.license_plate else ''} 
-        λήγει στις <strong>{payment.due_date.strftime('%d/%m/%Y')}</strong>.</p>
-        <h3>Στοιχεία:</h3>
-        <ul>
-        <li>Τύπος: {policy.policy_type}</li>
-        {'<li>Πινακίδα: ' + policy.license_plate + '</li>' if policy.license_plate else ''}
-        <li>Ποσό: €{payment.amount:.2f}</li>
-        <li>Λήξη: {payment.due_date.strftime('%d/%m/%Y')}</li>
-        </ul>
-        <p>Με εκτίμηση,<br><strong>CHI Insurance Brokers</strong></p>
-        </body></html>"""
+        return f"""<html>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+<div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+    <h2 style="color: #d32f2f;">Υπενθύμιση Ανανέωσης Ασφαλιστηρίου</h2>
+    
+    <p>Αγαπητή/έ <strong>{client.name}</strong>,</p>
+    
+    <p>Σας ενημερώνουμε ότι το ασφαλιστήριό σας πλησιάζει στη λήξη του. Για να εξασφαλίσετε την απρόσκοπτη συνέχιση της κάλυψής σας, παρακαλούμε όπως προβείτε στην έγκαιρη πληρωμή του συμβολαίου σας.</p>
+    
+    <div style="background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 20px 0;">
+        <strong>Υπολείπονται {days_until} {'ημέρα' if days_until == 1 else 'ημέρες'} μέχρι τη λήξη</strong>
+    </div>
+    
+    <h3 style="color: #1976d2;">Στοιχεία Ασφαλιστηρίου</h3>
+    <table style="width: 100%; border-collapse: collapse;">
+        <tr style="background: #f5f5f5;">
+            <td style="padding: 10px; border: 1px solid #ddd;"><strong>Είδος:</strong></td>
+            <td style="padding: 10px; border: 1px solid #ddd;">{policy.policy_type}</td>
+        </tr>
+        {'<tr><td style="padding: 10px; border: 1px solid #ddd;"><strong>Πινακίδα:</strong></td><td style="padding: 10px; border: 1px solid #ddd;">' + policy.license_plate + '</td></tr>' if policy.license_plate else ''}
+        <tr style="background: #f5f5f5;">
+            <td style="padding: 10px; border: 1px solid #ddd;"><strong>Ασφάλιστρο:</strong></td>
+            <td style="padding: 10px; border: 1px solid #ddd;">€{payment.amount:.2f}</td>
+        </tr>
+        <tr>
+            <td style="padding: 10px; border: 1px solid #ddd;"><strong>Ημερομηνία Λήξης:</strong></td>
+            <td style="padding: 10px; border: 1px solid #ddd;">{payment.due_date.strftime('%d/%m/%Y')}</td>
+        </tr>
+        <tr style="background: #f5f5f5;">
+            <td style="padding: 10px; border: 1px solid #ddd;"><strong>Υπολειπόμενες Ημέρες:</strong></td>
+            <td style="padding: 10px; border: 1px solid #ddd;"><strong style="color: {'#d32f2f' if days_until <= 7 else '#f57c00' if days_until <= 14 else '#388e3c'};">{days_until}</strong></td>
+        </tr>
+    </table>
+    
+    <p style="margin-top: 20px; padding: 15px; background: #e3f2fd; border-left: 4px solid #2196f3;">
+        <strong>Σημείωση:</strong> Εάν έχετε ήδη προβεί στην πληρωμή της ανανέωσης, παρακαλούμε αγνοήστε το παρόν μήνυμα.
+    </p>
+    
+    <p style="margin-top: 30px;">Με εκτίμηση,<br>
+    <strong>CHI Insurance Brokers</strong><br>
+    Email: xiatropoulos@gmail.com</p>
+</div>
+</body>
+</html>"""
     else:
-        return f"""<html><body style="font-family: Arial, sans-serif;">
-        <h2>Dear {client.name},</h2>
-        <p>Your <strong>{policy.policy_type}</strong> insurance 
-        {'with plate <strong>' + policy.license_plate + '</strong>' if policy.license_plate else ''} 
-        expires on <strong>{payment.due_date.strftime('%d/%m/%Y')}</strong>.</p>
-        <h3>Details:</h3>
-        <ul>
-        <li>Type: {policy.policy_type}</li>
-        {'<li>Plate: ' + policy.license_plate + '</li>' if policy.license_plate else ''}
-        <li>Amount: €{payment.amount:.2f}</li>
-        <li>Expiration: {payment.due_date.strftime('%d/%m/%Y')}</li>
-        </ul>
-        <p>Best regards,<br><strong>CHI Insurance Brokers</strong></p>
-        </body></html>"""
-
-
+        return f"""<html>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+<div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+    <h2 style="color: #d32f2f;">Insurance Policy Renewal Reminder</h2>
+    
+    <p>Dear <strong>{client.name}</strong>,</p>
+    
+    <p>We inform you that your insurance policy is approaching its expiration. To ensure uninterrupted continuation of your coverage, please proceed with timely payment of your contract.</p>
+    
+    <div style="background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 20px 0;">
+        <strong>{days_until} {'day' if days_until == 1 else 'days'} remaining until expiration</strong>
+    </div>
+    
+    <h3 style="color: #1976d2;">Insurance Policy Details</h3>
+    <table style="width: 100%; border-collapse: collapse;">
+        <tr style="background: #f5f5f5;">
+            <td style="padding: 10px; border: 1px solid #ddd;"><strong>Type:</strong></td>
+            <td style="padding: 10px; border: 1px solid #ddd;">{policy.policy_type}</td>
+        </tr>
+        {'<tr><td style="padding: 10px; border: 1px solid #ddd;"><strong>License Plate:</strong></td><td style="padding: 10px; border: 1px solid #ddd;">' + policy.license_plate + '</td></tr>' if policy.license_plate else ''}
+        <tr style="background: #f5f5f5;">
+            <td style="padding: 10px; border: 1px solid #ddd;"><strong>Premium:</strong></td>
+            <td style="padding: 10px; border: 1px solid #ddd;">€{payment.amount:.2f}</td>
+        </tr>
+        <tr>
+            <td style="padding: 10px; border: 1px solid #ddd;"><strong>Expiration Date:</strong></td>
+            <td style="padding: 10px; border: 1px solid #ddd;">{payment.due_date.strftime('%d/%m/%Y')}</td>
+        </tr>
+        <tr style="background: #f5f5f5;">
+            <td style="padding: 10px; border: 1px solid #ddd;"><strong>Remaining Days:</strong></td>
+            <td style="padding: 10px; border: 1px solid #ddd;"><strong style="color: {'#d32f2f' if days_until <= 7 else '#f57c00' if days_until <= 14 else '#388e3c'};">{days_until}</strong></td>
+        </tr>
+    </table>
+    
+    <p style="margin-top: 20px; padding: 15px; background: #e3f2fd; border-left: 4px solid #2196f3;">
+        <strong>Note:</strong> If you have already proceeded with payment of the renewal, please ignore this message.
+    </p>
+    
+    <p style="margin-top: 30px;">Best regards,<br>
+    <strong>CHI Insurance Brokers</strong><br>
+    Email: xiatropoulos@gmail.com</p>
+</div>
+</body>
+</html>"""
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
