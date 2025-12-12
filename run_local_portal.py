@@ -15,49 +15,53 @@ login_manager.login_view = 'login'
 
 from src.database.models import get_session, Client, Policy, Payment, PaymentStatus, PolicyStatus
 
+# Pre-computed password hashes (speeds up boot time)
+ADMIN_HASH = 'pbkdf2:sha256:1000000$Q8loSbCXnQvZgCXz$ee8b167d28f37981fc8d18f8f7792c2bd4ffe4e620be3c0836b1e76d4967e651'
+DEMO_HASH = 'pbkdf2:sha256:1000000$8YEdUiTYWTuy44Ox$d1d9f17b11850a7a615fd449540662dda8c94133767ec3947b91c2eaa4590134'
+
 # Admin account
 ADMIN = {
     'username': 'admin',
-    'password': generate_password_hash('CHIadmin2025!')
+    'password': ADMIN_HASH
 }
 
 # Client accounts
 USERS = {
-    'alex-law@hotmail.com': {'password': generate_password_hash('demo123'), 'client_id': 1},
-    'mpitsakoupolina@yahoo.gr': {'password': generate_password_hash('demo123'), 'client_id': 2},
-    'apoTTapo@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 3},
-    'DAMIORDOESNTLIVE@hotmail.com': {'password': generate_password_hash('demo123'), 'client_id': 4},
-    'voula.roukouna@sensorbeta.gr': {'password': generate_password_hash('demo123'), 'client_id': 5},
-    'papadimitriou.vasilis@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 9},
-    'GEORGE_SAXI@hotmail.com': {'password': generate_password_hash('demo123'), 'client_id': 10},
-    'ioanna.myriokefalitaki@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 11},
-    'charis_kouki@yahoo.gr': {'password': generate_password_hash('demo123'), 'client_id': 12},
-    'apostolopoulos.i@pg.com': {'password': generate_password_hash('demo123'), 'client_id': 13},
-    'dco@merit.gr': {'password': generate_password_hash('demo123'), 'client_id': 14},
-    'marivilampou@hotmail.com': {'password': generate_password_hash('demo123'), 'client_id': 15},
-    'eboulakakis@yahoo.gr': {'password': generate_password_hash('demo123'), 'client_id': 16},
-    'secretary@sensorbeta.gr': {'password': generate_password_hash('demo123'), 'client_id': 17},
-    'spanos17@otenet.gr': {'password': generate_password_hash('demo123'), 'client_id': 18},
-    'mkousoulakou@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 19},
-    'gavriilidisioannis1@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 21},
-    'asimakopoulouroul@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 22},
-    'p.vernardakis@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 23},
-    'manosalex73@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 24},
-    'info@sroom.gr': {'password': generate_password_hash('demo123'), 'client_id': 25},
-    'd.doulkeridis@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 26},
-    'christ154ian@yahoo.com': {'password': generate_password_hash('demo123'), 'client_id': 27},
-    'jojoxan@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 29},
-    'EIRINIZLN@hotmail.com': {'password': generate_password_hash('demo123'), 'client_id': 30},
-    'stavroulakormpaki@hotmail.com': {'password': generate_password_hash('demo123'), 'client_id': 31},
-    'bezerianose@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 32},
-    'micsot2@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 33},
-    'drnkatsios@hotmail.com': {'password': generate_password_hash('demo123'), 'client_id': 34},
-    'elentig@hotmail.com': {'password': generate_password_hash('demo123'), 'client_id': 35},
-    'chourmousis@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 37},
-    'mdetsi@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 38},
-    'logistirio1922@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 39},
-    'anna.xanthopoulou.c@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 40},
-    'kostisarvanitis@gmail.com': {'password': generate_password_hash('demo123'), 'client_id': 41}
+    'alex-law@hotmail.com': {'password': DEMO_HASH, 'client_id': 1},
+    'mpitsakoupolina@yahoo.gr': {'password': DEMO_HASH, 'client_id': 2},
+    'apoTTapo@gmail.com': {'password': DEMO_HASH, 'client_id': 3},
+    'DAMIORDOESNTLIVE@hotmail.com': {'password': DEMO_HASH, 'client_id': 4},
+    'voula.roukouna@sensorbeta.gr': {'password': DEMO_HASH, 'client_id': 5},
+    'papadimitriou.vasilis@gmail.com': {'password': DEMO_HASH, 'client_id': 9},
+    'GEORGE_SAXI@hotmail.com': {'password': DEMO_HASH, 'client_id': 10},
+    'ioanna.myriokefalitaki@gmail.com': {'password': DEMO_HASH, 'client_id': 11},
+    'charis_kouki@yahoo.gr': {'password': DEMO_HASH, 'client_id': 12},
+    'apostolopoulos.i@pg.com': {'password': DEMO_HASH, 'client_id': 13},
+    'dco@merit.gr': {'password': DEMO_HASH, 'client_id': 14},
+    'marivilampou@hotmail.com': {'password': DEMO_HASH, 'client_id': 15},
+    'eboulakakis@yahoo.gr': {'password': DEMO_HASH, 'client_id': 16},
+    'secretary@sensorbeta.gr': {'password': DEMO_HASH, 'client_id': 17},
+    'spanos17@otenet.gr': {'password': DEMO_HASH, 'client_id': 18},
+    'mkousoulakou@gmail.com': {'password': DEMO_HASH, 'client_id': 19},
+    'gavriilidisioannis1@gmail.com': {'password': DEMO_HASH, 'client_id': 21},
+    'asimakopoulouroul@gmail.com': {'password': DEMO_HASH, 'client_id': 22},
+    'p.vernardakis@gmail.com': {'password': DEMO_HASH, 'client_id': 23},
+    'manosalex73@gmail.com': {'password': DEMO_HASH, 'client_id': 24},
+    'info@sroom.gr': {'password': DEMO_HASH, 'client_id': 25},
+    'd.doulkeridis@gmail.com': {'password': DEMO_HASH, 'client_id': 26},
+    'christ154ian@yahoo.com': {'password': DEMO_HASH, 'client_id': 27},
+    'jojoxan@gmail.com': {'password': DEMO_HASH, 'client_id': 29},
+    'EIRINIZLN@hotmail.com': {'password': DEMO_HASH, 'client_id': 30},
+    'stavroulakormpaki@hotmail.com': {'password': DEMO_HASH, 'client_id': 31},
+    'bezerianose@gmail.com': {'password': DEMO_HASH, 'client_id': 32},
+    'micsot2@gmail.com': {'password': DEMO_HASH, 'client_id': 33},
+    'drnkatsios@hotmail.com': {'password': DEMO_HASH, 'client_id': 34},
+    'elentig@hotmail.com': {'password': DEMO_HASH, 'client_id': 35},
+    'chourmousis@gmail.com': {'password': DEMO_HASH, 'client_id': 37},
+    'mdetsi@gmail.com': {'password': DEMO_HASH, 'client_id': 38},
+    'logistirio1922@gmail.com': {'password': DEMO_HASH, 'client_id': 39},
+    'anna.xanthopoulou.c@gmail.com': {'password': DEMO_HASH, 'client_id': 40},
+    'kostisarvanitis@gmail.com': {'password': DEMO_HASH, 'client_id': 41}
 }
 
 class User(UserMixin):
