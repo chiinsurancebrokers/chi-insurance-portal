@@ -1046,6 +1046,42 @@ def commit_csv_changes(changes):
     return stats
 
 
+
+@app.route('/admin/policies')
+@admin_required
+def admin_policies():
+    """View all policies"""
+    db_session = get_session()
+    
+    try:
+        search = request.args.get('search', '')
+        
+        if search:
+            policies = db_session.query(Policy).join(Client).filter(
+                Client.name.ilike(f'%{search}%')
+            ).order_by(Policy.expiration_date).all()
+        else:
+            policies = db_session.query(Policy).order_by(Policy.expiration_date).all()
+        
+        policy_list = []
+        for policy in policies:
+            policy_list.append({
+                'id': policy.id,
+                'client_name': policy.client.name if policy.client else 'Unknown',
+                'policy_type': policy.policy_type,
+                'provider': policy.provider,
+                'license_plate': policy.license_plate,
+                'premium': policy.premium,
+                'start_date': policy.start_date,
+                'expiration_date': policy.expiration_date,
+                'status': policy.status.value if policy.status else 'Unknown'
+            })
+        
+        return render_template('admin/policies.html', policies=policy_list, search=search)
+    finally:
+        db_session.close()
+
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
