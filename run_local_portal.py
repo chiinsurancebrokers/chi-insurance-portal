@@ -580,9 +580,12 @@ def admin_send_email(email_id):
         import resend
         resend.api_key = os.getenv('RESEND_API_KEY')
         
+        # Clean email address
+        recipient = email.recipient_email.strip() if email.recipient_email else ""
+        
         params = {
             "from": "CHI Insurance <onboarding@resend.dev>",
-            "to": [email.recipient_email],
+            "to": [recipient],
             "subject": email.subject,
             "html": email.body_html
         }
