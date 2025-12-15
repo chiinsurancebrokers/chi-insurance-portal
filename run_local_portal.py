@@ -562,10 +562,10 @@ def admin_email_queue():
 @admin_required
 def admin_send_email(email_id):
     """Send a single queued email"""
-    RESEND_API_KEY = os.getenv('RESEND_API_KEY')
+    GMAIL_APP_PASSWORD = os.getenv('GMAIL_APP_PASSWORD')
     
-    if not RESEND_API_KEY:
-        flash('Email not configured - Add RESEND_API_KEY to Railway', 'danger')
+    if not GMAIL_APP_PASSWORD:
+        flash('Email not configured - Add GMAIL_APP_PASSWORD to Railway', 'danger')
         return redirect(url_for('admin_email_queue'))
     
     db_session = get_session()
@@ -577,23 +577,29 @@ def admin_send_email(email_id):
             return redirect(url_for('admin_email_queue'))
         
         # Send email via Resend
-        import resend
-        resend.api_key = os.getenv('RESEND_API_KEY')
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
         
-        # Clean email address
+        SMTP_SERVER = 'smtp.gmail.com'
+        SMTP_PORT = 587
+        SMTP_USER = 'xiatropoulos@gmail.com'
+        SMTP_PASSWORD = os.getenv('GMAIL_APP_PASSWORD')
+        
+        # Send via Gmail
         recipient = email.recipient_email.strip() if email.recipient_email else ""
         
-        # Use custom from address if domain verified, otherwise test domain
-        from_address = os.getenv('EMAIL_FROM_ADDRESS', 'CHI Insurance <onboarding@resend.dev>')
+        msg = MIMEMultipart('alternative')
+        msg['From'] = f'CHI Insurance <{SMTP_USER}>'
+        msg['To'] = recipient
+        msg['Subject'] = email.subject
+        msg.attach(MIMEText(email.body_html, 'html', 'utf-8'))
         
-        params = {
-            "from": from_address,
-            "to": [recipient],
-            "subject": email.subject,
-            "html": email.body_html
-        }
-        
-        resend.Emails.send(params)
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10)
+        server.starttls()
+        server.login(SMTP_USER, SMTP_PASSWORD)
+        server.send_message(msg)
+        server.quit()
         
         # Update status
         email.status = EmailStatus.SENT
@@ -696,18 +702,25 @@ def admin_debug_env():
 @admin_required
 def admin_test_email():
     """Send test email to admin"""
-    import resend
-    resend.api_key = os.getenv('RESEND_API_KEY')
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
     
     try:
-        params = {
-            "from": "CHI Insurance <onboarding@resend.dev>",
-            "to": ["xiatropoulos@gmail.com"],
-            "subject": "Test Email from CHI Portal",
-            "html": "<h2>Success!</h2><p>Your Resend integration is working!</p>"
-        }
+        SMTP_USER = 'xiatropoulos@gmail.com'
+        SMTP_PASSWORD = os.getenv('GMAIL_APP_PASSWORD')
         
-        resend.Emails.send(params)
+        msg = MIMEMultipart('alternative')
+        msg['From'] = f'CHI Insurance <{SMTP_USER}>'
+        msg['To'] = 'xiatropoulos@gmail.com'
+        msg['Subject'] = 'Test Email from CHI Portal'
+        msg.attach(MIMEText("<h2>Success!</h2><p>Gmail SMTP is working!</p>", 'html'))
+        
+        server = smtplib.SMTP('smtp.gmail.com', 587, timeout=10)
+        server.starttls()
+        server.login(SMTP_USER, SMTP_PASSWORD)
+        server.send_message(msg)
+        server.quit()
         flash('Test email sent to xiatropoulos@gmail.com', 'success')
     except Exception as e:
         flash(f'Test failed: {str(e)}', 'danger')
