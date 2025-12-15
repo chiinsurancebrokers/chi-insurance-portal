@@ -15,15 +15,14 @@ login_manager.login_view = 'login'
 
 from src.database.models import get_session, Client, Policy, Payment, PaymentStatus, PolicyStatus
 
-# Pre-computed password hashes
 ADMIN_HASH = 'pbkdf2:sha256:1000000$Q8loSbCXnQvZgCXz$ee8b167d28f37981fc8d18f8f7792c2bd4ffe4e620be3c0836b1e76d4967e651'
 DEMO_HASH = 'pbkdf2:sha256:1000000$8YEdUiTYWTuy44Ox$d1d9f17b11850a7a615fd449540662dda8c94133767ec3947b91c2eaa4590134'
 
-# Pre-computed password hashes (speeds up boot time)
-# Admin account
 ADMIN = {
     'username': 'admin',
-# Client accounts
+    'password': ADMIN_HASH
+}
+
 USERS = {
     'alex-law@hotmail.com': {'password': DEMO_HASH, 'client_id': 1},
     'mpitsakoupolina@yahoo.gr': {'password': DEMO_HASH, 'client_id': 2},
