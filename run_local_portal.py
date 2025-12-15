@@ -669,6 +669,25 @@ def admin_migrate_db():
     return redirect(url_for('admin_dashboard'))
 
 
+
+@app.route('/admin/debug-env')
+@admin_required
+def admin_debug_env():
+    """Debug environment variables"""
+    import os
+    resend_key = os.getenv('RESEND_API_KEY')
+    
+    debug_info = {
+        'Has RESEND_API_KEY': resend_key is not None,
+        'Key length': len(resend_key) if resend_key else 0,
+        'Key starts with re_': resend_key.startswith('re_') if resend_key else False,
+        'First 10 chars': resend_key[:10] if resend_key else 'NONE',
+        'All env vars': list(os.environ.keys())
+    }
+    
+    return f"<pre>{debug_info}</pre>"
+
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
