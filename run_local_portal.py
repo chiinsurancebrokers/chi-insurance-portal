@@ -562,13 +562,10 @@ def admin_email_queue():
 @admin_required
 def admin_send_email(email_id):
     """Send a single queued email"""
-    SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
-    SMTP_PORT = int(os.getenv('SMTP_PORT', 587))
-    SMTP_USER = os.getenv('SMTP_USER', 'xiatropoulos@gmail.com')
-    SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', '')
+    RESEND_API_KEY = os.getenv('RESEND_API_KEY')
     
-    if not SMTP_PASSWORD:
-        flash('Email not configured', 'danger')
+    if not RESEND_API_KEY:
+        flash('Email not configured - Add RESEND_API_KEY to Railway', 'danger')
         return redirect(url_for('admin_email_queue'))
     
     db_session = get_session()
