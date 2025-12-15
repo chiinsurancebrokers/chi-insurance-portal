@@ -583,8 +583,11 @@ def admin_send_email(email_id):
         # Clean email address
         recipient = email.recipient_email.strip() if email.recipient_email else ""
         
+        # Use custom from address if domain verified, otherwise test domain
+        from_address = os.getenv('EMAIL_FROM_ADDRESS', 'CHI Insurance <onboarding@resend.dev>')
+        
         params = {
-            "from": "CHI Insurance <onboarding@resend.dev>",
+            "from": from_address,
             "to": [recipient],
             "subject": email.subject,
             "html": email.body_html
