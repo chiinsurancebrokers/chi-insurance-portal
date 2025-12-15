@@ -561,58 +561,64 @@ def admin_email_queue():
 @app.route('/admin/email/send/<int:email_id>', methods=['POST'])
 @admin_required
 def admin_send_email(email_id):
-    """Send a single queued email"""
-    BREVO_API_KEY = os.getenv('BREVO_API_KEY')
+    """Send a single queued email via Brevo"""
+    import requests
+    
+    BREVO_API_KEY = os.getenv("BREVO_API_KEY")
     
     if not BREVO_API_KEY:
-        flash('Email not configured - Add BREVO_API_KEY to Railway', 'danger')
-        return redirect(url_for('admin_email_queue'))
+        flash("Email not configured - Add BREVO_API_KEY to Railway", "danger")
+        return redirect(url_for("admin_email_queue"))
     
     db_session = get_session()
     
     try:
         email = db_session.query(EmailQueue).get(email_id)
         if not email:
-            flash('Email not found', 'danger')
-            return redirect(url_for('admin_email_queue'))
+            flash("Email not found", "danger")
+            return redirect(url_for("admin_email_queue"))
         
-        # Send email via Resend
-        
-        BREVO_API_KEY = 'smtp.brevo.com'
-        SMTP_PORT = 587
-        BREVO_API_KEY = 'xiatropoulos@brevo.com'
-        BREVO_API_KEY = os.getenv('BREVO_API_KEY')
-        
-        # Send via Gmail
+        # Send via Brevo API
         recipient = email.recipient_email.strip() if email.recipient_email else ""
         
-        msg = MIMEMultipart('alternative')
-        msg['From'] = f'CHI Insurance <{BREVO_API_KEY}>'
-        msg['To'] = recipient
-        msg['Subject'] = email.subject
-        msg.attach(MIMEText(email.body_html, 'html', 'utf-8'))
+        headers = {
+            "accept": "application/json",
+            "api-key": BREVO_API_KEY,
+            "content-type": "application/json"
+        }
         
-        server = smtplib.SMTP(BREVO_API_KEY, SMTP_PORT, timeout=10)
-        server.starttls()
-        server.login(BREVO_API_KEY, BREVO_API_KEY)
-        server.send_message(msg)
-        server.quit()
+        payload = {
+            "sender": {"name": "CHI Insurance", "email": "xiatropoulos@gmail.com"},
+            "to": [{"email": recipient}],
+            "subject": email.subject,
+            "htmlContent": email.body_html
+        }
+        
+        response = requests.post(
+            "https://api.brevo.com/v3/smtp/email",
+            headers=headers,
+            json=payload,
+            timeout=10
+        )
+        
+        if response.status_code not in [200, 201]:
+            raise Exception(f"Brevo API error: {response.text}")
         
         # Update status
         email.status = EmailStatus.SENT
         email.sent_at = datetime.now()
         db_session.commit()
         
-        flash(f'Email sent to {email.recipient_email}', 'success')
+        flash(f"Email sent to {email.recipient_email}", "success")
     except Exception as e:
         email.status = EmailStatus.FAILED
         email.error_message = str(e)
         db_session.commit()
-        flash(f'Failed: {str(e)}', 'danger')
+        flash(f"Failed: {str(e)}", "danger")
     finally:
         db_session.close()
     
-    return redirect(url_for('admin_email_queue'))
+    return redirect(url_for("admin_email_queue"))
 
 def generate_renewal_email(client, policy, payment, days_until, language):
     """Generate email subject and body"""
@@ -698,28 +704,40 @@ def admin_debug_env():
 @app.route('/admin/email/test', methods=['POST'])
 @admin_required
 def admin_test_email():
-    """Send test email to admin"""
+    """Send test email to admin via Brevo"""
+    import requests
     
     try:
-        BREVO_API_KEY = 'xiatropoulos@brevo.com'
-        BREVO_API_KEY = os.getenv('BREVO_API_KEY')
+        BREVO_API_KEY = os.getenv("BREVO_API_KEY")
         
-        msg = MIMEMultipart('alternative')
-        msg['From'] = f'CHI Insurance <{BREVO_API_KEY}>'
-        msg['To'] = 'xiatropoulos@brevo.com'
-        msg['Subject'] = 'Test Email from CHI Portal'
-        msg.attach(MIMEText("<h2>Success!</h2><p>Gmail SMTP is working!</p>", 'html'))
+        headers = {
+            "accept": "application/json",
+            "api-key": BREVO_API_KEY,
+            "content-type": "application/json"
+        }
         
-        server = smtplib.SMTP('smtp.brevo.com', 587, timeout=10)
-        server.starttls()
-        server.login(BREVO_API_KEY, BREVO_API_KEY)
-        server.send_message(msg)
-        server.quit()
-        flash('Test email sent to xiatropoulos@brevo.com', 'success')
+        payload = {
+            "sender": {"name": "CHI Insurance", "email": "xiatropoulos@gmail.com"},
+            "to": [{"email": "xiatropoulos@gmail.com"}],
+            "subject": "Test Email from CHI Portal",
+            "htmlContent": "<h2>Success!</h2><p>Brevo integration is working!</p>"
+        }
+        
+        response = requests.post(
+            "https://api.brevo.com/v3/smtp/email",
+            headers=headers,
+            json=payload,
+            timeout=10
+        )
+        
+        if response.status_code in [200, 201]:
+            flash("Test email sent to xiatropoulos@gmail.com", "success")
+        else:
+            raise Exception(response.text)
     except Exception as e:
-        flash(f'Test failed: {str(e)}', 'danger')
+        flash(f"Test failed: {str(e)}", "danger")
     
-    return redirect(url_for('admin_email_queue'))
+    return redirect(url_for("admin_email_queue"))
 
 @app.route('/admin/email-queue/clear', methods=['POST'])
 @admin_required
