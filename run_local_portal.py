@@ -1082,6 +1082,81 @@ def admin_policies():
         db_session.close()
 
 
+
+@app.route('/admin/policy/<int:policy_id>/edit', methods=['GET', 'POST'])
+@admin_required
+def admin_edit_policy(policy_id):
+    """Edit policy"""
+    db_session = get_session()
+    
+    try:
+        policy = db_session.query(Policy).get(policy_id)
+        if not policy:
+            flash('Policy not found', 'danger')
+            return redirect(url_for('admin_policies'))
+        
+        if request.method == 'POST':
+            policy.policy_type = request.form.get('policy_type')
+            policy.provider = request.form.get('provider')
+            policy.license_plate = request.form.get('license_plate') or None
+            
+            premium_str = request.form.get('premium', '0').replace(',', '.')
+            try:
+                policy.premium = float(premium_str)
+            except:
+                policy.premium = 0.0
+            
+            start_date_str = request.form.get('start_date')
+            if start_date_str:
+                policy.start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            
+            expiry_date_str = request.form.get('expiration_date')
+            if expiry_date_str:
+                policy.expiration_date = datetime.strptime(expiry_date_str, '%Y-%m-%d').date()
+            
+            status_str = request.form.get('status')
+            if status_str:
+                policy.status = PolicyStatus[status_str]
+            
+            db_session.commit()
+            flash('Policy updated successfully', 'success')
+            return redirect(url_for('admin_policies'))
+        
+        return render_template('admin/edit_policy.html', policy=policy)
+    finally:
+        db_session.close()
+
+@app.route('/admin/policy/<int:policy_id>/delete', methods=['POST'])
+@admin_required
+def admin_delete_policy(policy_id):
+    """Delete policy and associated payments"""
+    db_session = get_session()
+    
+    try:
+        policy = db_session.query(Policy).get(policy_id)
+        if not policy:
+            flash('Policy not found', 'danger')
+            return redirect(url_for('admin_policies'))
+        
+        client_name = policy.client.name if policy.client else 'Unknown'
+        
+        # Delete associated payments first
+        db_session.query(Payment).filter_by(policy_id=policy_id).delete()
+        
+        # Delete policy
+        db_session.delete(policy)
+        db_session.commit()
+        
+        flash(f'Policy for {client_name} deleted successfully', 'success')
+    except Exception as e:
+        db_session.rollback()
+        flash(f'Error deleting policy: {str(e)}', 'danger')
+    finally:
+        db_session.close()
+    
+    return redirect(url_for('admin_policies'))
+
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)

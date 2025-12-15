@@ -20,6 +20,17 @@
     <div class="container mt-4">
         <h2><i class="bi bi-file-earmark-text"></i> All Policies</h2>
         
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
         <div class="row mb-3">
             <div class="col-md-6">
                 <form method="GET" class="input-group">
@@ -46,6 +57,7 @@
                         <th>Premium</th>
                         <th>Expires</th>
                         <th>Status</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -63,6 +75,16 @@
                             {% else %}
                             <span class="badge bg-secondary">{{ policy.status }}</span>
                             {% endif %}
+                        </td>
+                        <td>
+                            <a href="/admin/policy/{{ policy.id }}/edit" class="btn btn-sm btn-primary">
+                                <i class="bi bi-pencil"></i> Edit
+                            </a>
+                            <form method="POST" action="/admin/policy/{{ policy.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete this policy and all associated payments?')">
+                                <button type="submit" class="btn btn-sm btn-danger">
+                                    <i class="bi bi-trash"></i> Delete
+                                </button>
+                            </form>
                         </td>
                     </tr>
                     {% endfor %}
