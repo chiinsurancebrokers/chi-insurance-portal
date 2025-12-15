@@ -562,10 +562,6 @@ def admin_email_queue():
 @admin_required
 def admin_send_email(email_id):
     """Send a single queued email"""
-    import smtplib
-    from email.mime.text import MIMEText
-    from email.mime.multipart import MIMEMultipart
-    
     SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
     SMTP_PORT = int(os.getenv('SMTP_PORT', 587))
     SMTP_USER = os.getenv('SMTP_USER', 'xiatropoulos@gmail.com')
@@ -583,18 +579,18 @@ def admin_send_email(email_id):
             flash('Email not found', 'danger')
             return redirect(url_for('admin_email_queue'))
         
-        # Send email
-        msg = MIMEMultipart('alternative')
-        msg['From'] = SMTP_USER
-        msg['To'] = email.recipient_email
-        msg['Subject'] = email.subject
-        msg.attach(MIMEText(email.body_html, 'html', 'utf-8'))
+        # Send email via Resend
+        import resend
+        resend.api_key = os.getenv('RESEND_API_KEY')
         
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-        server.starttls()
-        server.login(SMTP_USER, SMTP_PASSWORD)
-        server.send_message(msg)
-        server.quit()
+        params = {
+            "from": "CHI Insurance <onboarding@resend.dev>",
+            "to": [email.recipient_email],
+            "subject": email.subject,
+            "html": email.body_html
+        }
+        
+        resend.Emails.send(params)
         
         # Update status
         email.status = EmailStatus.SENT
