@@ -658,6 +658,21 @@ def generate_renewal_email(client, policy, payment, days_until, language):
     return subject, body
 
 
+
+@app.route('/admin/migrate-db')
+@admin_required
+def admin_migrate_db():
+    """Create email_queue table if not exists"""
+    from src.database.models import Base, get_engine
+    try:
+        engine = get_engine()
+        Base.metadata.create_all(engine)
+        flash('Database tables created successfully', 'success')
+    except Exception as e:
+        flash(f'Migration error: {str(e)}', 'danger')
+    return redirect(url_for('admin_dashboard'))
+
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
