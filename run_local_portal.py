@@ -26,12 +26,12 @@ ADMIN = {
 USERS = {
     'alex-law@hotmail.com': {'password': DEMO_HASH, 'client_id': 1},
     'mpitsakoupolina@yahoo.gr': {'password': DEMO_HASH, 'client_id': 2},
-    'apoTTapo@gmail.com': {'password': DEMO_HASH, 'client_id': 3},
+    'apoTTapo@brevo.com': {'password': DEMO_HASH, 'client_id': 3},
     'DAMIORDOESNTLIVE@hotmail.com': {'password': DEMO_HASH, 'client_id': 4},
     'voula.roukouna@sensorbeta.gr': {'password': DEMO_HASH, 'client_id': 5},
-    'papadimitriou.vasilis@gmail.com': {'password': DEMO_HASH, 'client_id': 9},
+    'papadimitriou.vasilis@brevo.com': {'password': DEMO_HASH, 'client_id': 9},
     'GEORGE_SAXI@hotmail.com': {'password': DEMO_HASH, 'client_id': 10},
-    'ioanna.myriokefalitaki@gmail.com': {'password': DEMO_HASH, 'client_id': 11},
+    'ioanna.myriokefalitaki@brevo.com': {'password': DEMO_HASH, 'client_id': 11},
     'charis_kouki@yahoo.gr': {'password': DEMO_HASH, 'client_id': 12},
     'apostolopoulos.i@pg.com': {'password': DEMO_HASH, 'client_id': 13},
     'dco@merit.gr': {'password': DEMO_HASH, 'client_id': 14},
@@ -39,26 +39,26 @@ USERS = {
     'eboulakakis@yahoo.gr': {'password': DEMO_HASH, 'client_id': 16},
     'secretary@sensorbeta.gr': {'password': DEMO_HASH, 'client_id': 17},
     'spanos17@otenet.gr': {'password': DEMO_HASH, 'client_id': 18},
-    'mkousoulakou@gmail.com': {'password': DEMO_HASH, 'client_id': 19},
-    'gavriilidisioannis1@gmail.com': {'password': DEMO_HASH, 'client_id': 21},
-    'asimakopoulouroul@gmail.com': {'password': DEMO_HASH, 'client_id': 22},
-    'p.vernardakis@gmail.com': {'password': DEMO_HASH, 'client_id': 23},
-    'manosalex73@gmail.com': {'password': DEMO_HASH, 'client_id': 24},
+    'mkousoulakou@brevo.com': {'password': DEMO_HASH, 'client_id': 19},
+    'gavriilidisioannis1@brevo.com': {'password': DEMO_HASH, 'client_id': 21},
+    'asimakopoulouroul@brevo.com': {'password': DEMO_HASH, 'client_id': 22},
+    'p.vernardakis@brevo.com': {'password': DEMO_HASH, 'client_id': 23},
+    'manosalex73@brevo.com': {'password': DEMO_HASH, 'client_id': 24},
     'info@sroom.gr': {'password': DEMO_HASH, 'client_id': 25},
-    'd.doulkeridis@gmail.com': {'password': DEMO_HASH, 'client_id': 26},
+    'd.doulkeridis@brevo.com': {'password': DEMO_HASH, 'client_id': 26},
     'christ154ian@yahoo.com': {'password': DEMO_HASH, 'client_id': 27},
-    'jojoxan@gmail.com': {'password': DEMO_HASH, 'client_id': 29},
+    'jojoxan@brevo.com': {'password': DEMO_HASH, 'client_id': 29},
     'EIRINIZLN@hotmail.com': {'password': DEMO_HASH, 'client_id': 30},
     'stavroulakormpaki@hotmail.com': {'password': DEMO_HASH, 'client_id': 31},
-    'bezerianose@gmail.com': {'password': DEMO_HASH, 'client_id': 32},
-    'micsot2@gmail.com': {'password': DEMO_HASH, 'client_id': 33},
+    'bezerianose@brevo.com': {'password': DEMO_HASH, 'client_id': 32},
+    'micsot2@brevo.com': {'password': DEMO_HASH, 'client_id': 33},
     'drnkatsios@hotmail.com': {'password': DEMO_HASH, 'client_id': 34},
     'elentig@hotmail.com': {'password': DEMO_HASH, 'client_id': 35},
-    'chourmousis@gmail.com': {'password': DEMO_HASH, 'client_id': 37},
-    'mdetsi@gmail.com': {'password': DEMO_HASH, 'client_id': 38},
-    'logistirio1922@gmail.com': {'password': DEMO_HASH, 'client_id': 39},
-    'anna.xanthopoulou.c@gmail.com': {'password': DEMO_HASH, 'client_id': 40},
-    'kostisarvanitis@gmail.com': {'password': DEMO_HASH, 'client_id': 41}
+    'chourmousis@brevo.com': {'password': DEMO_HASH, 'client_id': 37},
+    'mdetsi@brevo.com': {'password': DEMO_HASH, 'client_id': 38},
+    'logistirio1922@brevo.com': {'password': DEMO_HASH, 'client_id': 39},
+    'anna.xanthopoulou.c@brevo.com': {'password': DEMO_HASH, 'client_id': 40},
+    'kostisarvanitis@brevo.com': {'password': DEMO_HASH, 'client_id': 41}
 }
 
 class User(UserMixin):
@@ -562,10 +562,10 @@ def admin_email_queue():
 @admin_required
 def admin_send_email(email_id):
     """Send a single queued email"""
-    GMAIL_APP_PASSWORD = os.getenv('GMAIL_APP_PASSWORD')
+    BREVO_API_KEY = os.getenv('BREVO_API_KEY')
     
-    if not GMAIL_APP_PASSWORD:
-        flash('Email not configured - Add GMAIL_APP_PASSWORD to Railway', 'danger')
+    if not BREVO_API_KEY:
+        flash('Email not configured - Add BREVO_API_KEY to Railway', 'danger')
         return redirect(url_for('admin_email_queue'))
     
     db_session = get_session()
@@ -577,27 +577,24 @@ def admin_send_email(email_id):
             return redirect(url_for('admin_email_queue'))
         
         # Send email via Resend
-        import smtplib
-        from email.mime.text import MIMEText
-        from email.mime.multipart import MIMEMultipart
         
-        SMTP_SERVER = 'smtp.gmail.com'
+        BREVO_API_KEY = 'smtp.brevo.com'
         SMTP_PORT = 587
-        SMTP_USER = 'xiatropoulos@gmail.com'
-        SMTP_PASSWORD = os.getenv('GMAIL_APP_PASSWORD')
+        BREVO_API_KEY = 'xiatropoulos@brevo.com'
+        BREVO_API_KEY = os.getenv('BREVO_API_KEY')
         
         # Send via Gmail
         recipient = email.recipient_email.strip() if email.recipient_email else ""
         
         msg = MIMEMultipart('alternative')
-        msg['From'] = f'CHI Insurance <{SMTP_USER}>'
+        msg['From'] = f'CHI Insurance <{BREVO_API_KEY}>'
         msg['To'] = recipient
         msg['Subject'] = email.subject
         msg.attach(MIMEText(email.body_html, 'html', 'utf-8'))
         
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=10)
+        server = smtplib.SMTP(BREVO_API_KEY, SMTP_PORT, timeout=10)
         server.starttls()
-        server.login(SMTP_USER, SMTP_PASSWORD)
+        server.login(BREVO_API_KEY, BREVO_API_KEY)
         server.send_message(msg)
         server.quit()
         
@@ -702,26 +699,23 @@ def admin_debug_env():
 @admin_required
 def admin_test_email():
     """Send test email to admin"""
-    import smtplib
-    from email.mime.text import MIMEText
-    from email.mime.multipart import MIMEMultipart
     
     try:
-        SMTP_USER = 'xiatropoulos@gmail.com'
-        SMTP_PASSWORD = os.getenv('GMAIL_APP_PASSWORD')
+        BREVO_API_KEY = 'xiatropoulos@brevo.com'
+        BREVO_API_KEY = os.getenv('BREVO_API_KEY')
         
         msg = MIMEMultipart('alternative')
-        msg['From'] = f'CHI Insurance <{SMTP_USER}>'
-        msg['To'] = 'xiatropoulos@gmail.com'
+        msg['From'] = f'CHI Insurance <{BREVO_API_KEY}>'
+        msg['To'] = 'xiatropoulos@brevo.com'
         msg['Subject'] = 'Test Email from CHI Portal'
         msg.attach(MIMEText("<h2>Success!</h2><p>Gmail SMTP is working!</p>", 'html'))
         
-        server = smtplib.SMTP('smtp.gmail.com', 587, timeout=10)
+        server = smtplib.SMTP('smtp.brevo.com', 587, timeout=10)
         server.starttls()
-        server.login(SMTP_USER, SMTP_PASSWORD)
+        server.login(BREVO_API_KEY, BREVO_API_KEY)
         server.send_message(msg)
         server.quit()
-        flash('Test email sent to xiatropoulos@gmail.com', 'success')
+        flash('Test email sent to xiatropoulos@brevo.com', 'success')
     except Exception as e:
         flash(f'Test failed: {str(e)}', 'danger')
     
