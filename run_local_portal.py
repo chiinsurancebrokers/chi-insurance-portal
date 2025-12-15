@@ -199,28 +199,32 @@ def payments():
 @app.route('/admin/dashboard')
 @admin_required
 def admin_dashboard():
+    from datetime import timedelta
     db_session = get_session()
     
-    total_clients = db_session.query(Client).count()
-    total_policies = db_session.query(Policy).count()
-    active_policies = db_session.query(Policy).filter_by(status=PolicyStatus.ACTIVE).count()
-    
-    pending_payments = db_session.query(Payment).filter_by(status=PaymentStatus.PENDING).count()
-    paid_payments = db_session.query(Payment).filter_by(status=PaymentStatus.PAID).count()
-    overdue_payments = db_session.query(Payment).filter_by(status=PaymentStatus.OVERDUE).count()
-    
-    recent_clients = db_session.query(Client).order_by(Client.created_date.desc()).limit(5).all()
-    
-    db_session.close()
-    
-    return render_template('admin/dashboard.html',
-                         total_clients=total_clients,
-                         total_policies=total_policies,
-                         active_policies=active_policies,
-                         pending_payments=pending_payments,
-                         paid_payments=paid_payments,
-                         overdue_payments=overdue_payments,
-                         recent_clients=recent_clients)
+    try:
+        total_clients = db_session.query(Client).count()
+        active_policies = db_session.query(Policy).filter_by(status=PolicyStatus.ACTIVE).count()
+        pending_payments = db_session.query(Payment).filter_by(status=PaymentStatus.PENDING).count()
+        
+        # Expiring in next 30 days
+        today = datetime.now().date()
+        thirty_days = today + timedelta(days=30)
+        expiring_soon = db_session.query(Policy).filter(
+            Policy.expiration_date.between(today, thirty_days),
+            Policy.status == PolicyStatus.ACTIVE
+        ).count()
+        
+        stats = {
+            'total_clients': total_clients,
+            'active_policies': active_policies,
+            'pending_payments': pending_payments,
+            'expiring_soon': expiring_soon
+        }
+        
+        return render_template('admin/dashboard.html', stats=stats)
+    finally:
+        db_session.close()
 
 @app.route('/admin/clients')
 @admin_required
