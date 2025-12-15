@@ -17,6 +17,31 @@ class PolicyStatus(enum.Enum):
     EXPIRED = "EXPIRED"
     CANCELLED = "CANCELLED"
 
+
+class EmailStatus(enum.Enum):
+    QUEUED = "QUEUED"
+    SENT = "SENT"
+    FAILED = "FAILED"
+
+class EmailQueue(Base):
+    __tablename__ = 'email_queue'
+    
+    id = Column(Integer, primary_key=True)
+    client_id = Column(Integer, ForeignKey('clients.id'), nullable=False)
+    policy_id = Column(Integer, ForeignKey('policies.id'), nullable=False)
+    payment_id = Column(Integer, ForeignKey('payments.id'), nullable=False)
+    recipient_email = Column(String(200), nullable=False)
+    subject = Column(String(500))
+    body_html = Column(String(10000))
+    status = Column(SQLEnum(EmailStatus), default=EmailStatus.QUEUED)
+    sent_at = Column(DateTime)
+    error_message = Column(String(1000))
+    created_date = Column(DateTime, default=datetime.now)
+    
+    client = relationship('Client')
+    policy = relationship('Policy')
+    payment = relationship('Payment')
+
 class Client(Base):
     __tablename__ = 'clients'
     
