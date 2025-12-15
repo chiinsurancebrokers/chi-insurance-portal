@@ -688,6 +688,51 @@ def admin_debug_env():
     return f"<pre>{debug_info}</pre>"
 
 
+
+@app.route('/admin/email/test', methods=['POST'])
+@admin_required
+def admin_test_email():
+    """Send test email to admin"""
+    import resend
+    resend.api_key = os.getenv('RESEND_API_KEY')
+    
+    try:
+        params = {
+            "from": "CHI Insurance <onboarding@resend.dev>",
+            "to": ["xiatropoulos@gmail.com"],
+            "subject": "Test Email from CHI Portal",
+            "html": "<h2>Success!</h2><p>Your Resend integration is working!</p>"
+        }
+        
+        resend.Emails.send(params)
+        flash('Test email sent to xiatropoulos@gmail.com', 'success')
+    except Exception as e:
+        flash(f'Test failed: {str(e)}', 'danger')
+    
+    return redirect(url_for('admin_email_queue'))
+
+@app.route('/admin/email-queue/clear', methods=['POST'])
+@admin_required
+def admin_clear_queue():
+    """Clear all queued and failed emails"""
+    db_session = get_session()
+    
+    try:
+        deleted = db_session.query(EmailQueue).filter(
+            EmailQueue.status.in_([EmailStatus.QUEUED, EmailStatus.FAILED])
+        ).delete()
+        
+        db_session.commit()
+        flash(f'Cleared {deleted} emails from queue', 'success')
+    except Exception as e:
+        db_session.rollback()
+        flash(f'Error: {str(e)}', 'danger')
+    finally:
+        db_session.close()
+    
+    return redirect(url_for('admin_email_queue'))
+
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
