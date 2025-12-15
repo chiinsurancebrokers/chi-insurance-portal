@@ -761,6 +761,287 @@ def admin_clear_queue():
     return redirect(url_for('admin_email_queue'))
 
 
+
+@app.route('/admin/csv-upload', methods=['GET', 'POST'])
+@admin_required
+def admin_csv_upload():
+    """Upload and preview CSV changes"""
+    if request.method == 'POST':
+        if 'file' not in request.files:
+            flash('No file uploaded', 'danger')
+            return redirect(request.url)
+        
+        file = request.files['file']
+        if file.filename == '':
+            flash('No file selected', 'danger')
+            return redirect(request.url)
+        
+        if not file.filename.endswith('.csv'):
+            flash('Only CSV files allowed', 'danger')
+            return redirect(request.url)
+        
+        # Save file temporarily
+        import tempfile
+        import os
+        temp_path = os.path.join(tempfile.gettempdir(), file.filename)
+        file.save(temp_path)
+        
+        # Parse and preview changes
+        try:
+            changes = parse_csv_changes(temp_path)
+            session['csv_temp_path'] = temp_path
+            session['csv_filename'] = file.filename
+            return render_template('admin/csv_preview.html', changes=changes, filename=file.filename)
+        except Exception as e:
+            flash(f'Error parsing CSV: {str(e)}', 'danger')
+            return redirect(request.url)
+    
+    return render_template('admin/csv_upload.html')
+
+@app.route('/admin/csv-commit', methods=['POST'])
+@admin_required
+def admin_csv_commit():
+    """Commit CSV changes to database"""
+    temp_path = session.get('csv_temp_path')
+    filename = session.get('csv_filename')
+    
+    if not temp_path:
+        flash('No CSV data to commit', 'danger')
+        return redirect(url_for('admin_csv_upload'))
+    
+    try:
+        changes = parse_csv_changes(temp_path)
+        result = commit_csv_changes(changes)
+        
+        flash(f'Success! Added {result["new"]} policies, Updated {result["updated"]}, Created {result["payments"]} payments', 'success')
+        
+        # Clean up
+        import os
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        session.pop('csv_temp_path', None)
+        session.pop('csv_filename', None)
+        
+    except Exception as e:
+        flash(f'Error committing changes: {str(e)}', 'danger')
+    
+    return redirect(url_for('admin_csv_upload'))
+
+def parse_csv_changes(filepath):
+    """Parse CSV and detect changes"""
+    import csv
+    from datetime import datetime
+    
+    db_session = get_session()
+    
+    # Detect format
+    with open(filepath, 'r', encoding='utf-8-sig') as f:
+        first_line = f.readline()
+        is_3p = 'INSURANCE COMPANY' in first_line.upper()
+    
+    changes = {
+        'new_policies': [],
+        'updated_policies': [],
+        'unchanged': [],
+        'new_clients': []
+    }
+    
+    with open(filepath, 'r', encoding='utf-8-sig') as f:
+        reader = csv.DictReader(f, delimiter=';' if ';' in first_line else ',')
+        
+        for row in reader:
+            if is_3p:
+                client_name = row.get('CLIENT NAME', '').strip()
+                policy_type = row.get('INSURANCE TYPE', '').strip()
+                provider = row.get('INSURANCE COMPANY', '').strip()
+                license_plate = row.get('LICENSE PLATE', '').strip() or None
+                premium_str = row.get('PREMIUM AMOUNT', '0').replace(',', '.')
+                expiry_str = row.get('EXPIRY DATE', '')
+            else:
+                # Hellas Direct format
+                client_name = row.get('Ονοματεπώνυμο', '').strip()
+                policy_type = 'ΑΥΤΟΚΙΝΗΤΟ'
+                provider = 'HELLAS DIRECT'
+                license_plate = row.get('Αρ. Κυκλοφορίας', '').strip() or None
+                premium_str = row.get('Ασφάλιστρο', '0').replace(',', '.')
+                expiry_str = row.get('Λήξη', '')
+            
+            if not client_name:
+                continue
+            
+            # Parse data
+            try:
+                premium = float(premium_str)
+            except:
+                premium = 0.0
+            
+            try:
+                expiry_date = datetime.strptime(expiry_str, '%d/%m/%Y').date()
+            except:
+                expiry_date = None
+            
+            # Check if client exists
+            client = db_session.query(Client).filter_by(name=client_name).first()
+            
+            if not client:
+                changes['new_clients'].append({
+                    'name': client_name,
+                    'policy_type': policy_type,
+                    'provider': provider,
+                    'license_plate': license_plate,
+                    'premium': premium,
+                    'expiry_date': expiry_date
+                })
+                continue
+            
+            # Check if policy exists
+            if license_plate:
+                existing = db_session.query(Policy).filter_by(
+                    client_id=client.id,
+                    license_plate=license_plate
+                ).first()
+            else:
+                existing = db_session.query(Policy).filter_by(
+                    client_id=client.id,
+                    policy_type=policy_type,
+                    provider=provider
+                ).first()
+            
+            if not existing:
+                changes['new_policies'].append({
+                    'client_name': client_name,
+                    'client_id': client.id,
+                    'policy_type': policy_type,
+                    'provider': provider,
+                    'license_plate': license_plate,
+                    'premium': premium,
+                    'expiry_date': expiry_date
+                })
+            elif existing.premium != premium or existing.expiration_date != expiry_date:
+                changes['updated_policies'].append({
+                    'client_name': client_name,
+                    'policy_id': existing.id,
+                    'policy_type': policy_type,
+                    'license_plate': license_plate,
+                    'old_premium': existing.premium,
+                    'new_premium': premium,
+                    'old_expiry': existing.expiration_date,
+                    'new_expiry': expiry_date
+                })
+            else:
+                changes['unchanged'].append({
+                    'client_name': client_name,
+                    'policy_type': policy_type
+                })
+    
+    db_session.close()
+    return changes
+
+def commit_csv_changes(changes):
+    """Commit parsed changes to database"""
+    from datetime import datetime
+    db_session = get_session()
+    
+    stats = {'new': 0, 'updated': 0, 'payments': 0, 'clients': 0}
+    
+    try:
+        # Create new clients
+        for item in changes['new_clients']:
+            client = Client(name=item['name'])
+            db_session.add(client)
+            db_session.flush()
+            
+            policy = Policy(
+                client_id=client.id,
+                policy_type=item['policy_type'],
+                provider=item['provider'],
+                license_plate=item['license_plate'],
+                premium=item['premium'],
+                expiration_date=item['expiry_date'],
+                start_date=datetime.now().date(),
+                status=PolicyStatus.ACTIVE
+            )
+            db_session.add(policy)
+            db_session.flush()
+            
+            if item['expiry_date'] and item['premium']:
+                payment = Payment(
+                    policy_id=policy.id,
+                    amount=item['premium'],
+                    due_date=item['expiry_date'],
+                    status=PaymentStatus.PENDING
+                )
+                db_session.add(payment)
+                stats['payments'] += 1
+            
+            stats['clients'] += 1
+            stats['new'] += 1
+        
+        # Add new policies
+        for item in changes['new_policies']:
+            policy = Policy(
+                client_id=item['client_id'],
+                policy_type=item['policy_type'],
+                provider=item['provider'],
+                license_plate=item['license_plate'],
+                premium=item['premium'],
+                expiration_date=item['expiry_date'],
+                start_date=datetime.now().date(),
+                status=PolicyStatus.ACTIVE
+            )
+            db_session.add(policy)
+            db_session.flush()
+            
+            if item['expiry_date'] and item['premium']:
+                payment = Payment(
+                    policy_id=policy.id,
+                    amount=item['premium'],
+                    due_date=item['expiry_date'],
+                    status=PaymentStatus.PENDING
+                )
+                db_session.add(payment)
+                stats['payments'] += 1
+            
+            stats['new'] += 1
+        
+        # Update existing policies
+        for item in changes['updated_policies']:
+            policy = db_session.query(Policy).get(item['policy_id'])
+            if policy:
+                policy.premium = item['new_premium']
+                policy.expiration_date = item['new_expiry']
+                
+                # Update or create payment
+                payment = db_session.query(Payment).filter_by(
+                    policy_id=policy.id,
+                    status=PaymentStatus.PENDING
+                ).first()
+                
+                if payment:
+                    payment.amount = item['new_premium']
+                    payment.due_date = item['new_expiry']
+                else:
+                    payment = Payment(
+                        policy_id=policy.id,
+                        amount=item['new_premium'],
+                        due_date=item['new_expiry'],
+                        status=PaymentStatus.PENDING
+                    )
+                    db_session.add(payment)
+                    stats['payments'] += 1
+                
+                stats['updated'] += 1
+        
+        db_session.commit()
+    except Exception as e:
+        db_session.rollback()
+        raise e
+    finally:
+        db_session.close()
+    
+    return stats
+
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
