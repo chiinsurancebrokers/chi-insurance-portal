@@ -912,8 +912,18 @@ def parse_csv_changes(filepath):
             continue
         
         # Clean license plate (skip invalid ones)
-        if license_plate and (len(license_plate) > 12 or 'ΜΕΤΑΦΟΡΑ' in license_plate or 'ΠΑΡΑΣΚΕΥΗ' in license_plate):
-            license_plate = None
+        if license_plate:
+            # Invalid if: too long, contains keywords, or looks like a name (no digits)
+            import re
+            has_digits = bool(re.search(r'\d', license_plate))
+            is_invalid = (
+                len(license_plate) > 12 or 
+                'ΜΕΤΑΦΟΡΑ' in license_plate or 
+                'ΠΑΡΑΣΚΕΥΗ' in license_plate or
+                not has_digits  # License plates must have numbers
+            )
+            if is_invalid:
+                license_plate = None
         
         # Map Greek policy types to English
         type_map = {
