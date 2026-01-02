@@ -39,6 +39,8 @@
                 <div>
                     <button type="button" class="btn btn-sm btn-secondary" onclick="selectAll()">Select All</button>
                     <button type="button" class="btn btn-sm btn-secondary" onclick="deselectAll()">Deselect All</button>
+                    <button type="button" class="btn btn-sm btn-info" onclick="setAllAgent('3p')">All 3P</button>
+                    <button type="button" class="btn btn-sm btn-warning" onclick="setAllAgent('ca')">All CA</button>
                 </div>
                 <button type="submit" class="btn btn-primary"><i class="bi bi-plus-circle"></i> Queue Selected</button>
             </div>
@@ -49,10 +51,11 @@
                         <th>Client</th>
                         <th>Email</th>
                         <th>Policy</th>
+                        <th>Provider</th>
                         <th>Amount</th>
                         <th>Start Date</th>
-                        <th>Expires</th>
                         <th>Days</th>
+                        <th>Agent</th>
                         <th>Status</th>
                     </tr>
                 </thead>
@@ -63,10 +66,18 @@
                     <td>{{ item.client.name }}</td>
                     <td>{% if item.client.email %}<small>{{ item.client.email }}</small>{% else %}<a href="/admin/client/{{ item.client.id }}/edit" class="btn btn-outline-danger btn-sm"><i class="bi bi-plus"></i> Add</a>{% endif %}</td>
                     <td>{{ item.policy.policy_type }}</td>
-                    <td>&euro;{{ "%.2f"|format(item.payment.amount) }}</td>
+                    <td><small>{{ item.policy.provider }}</small></td>
+                    <td>EUR{{ "%.2f"|format(item.payment.amount) }}</td>
                     <td><strong>{{ item.policy.start_date.strftime('%d/%m/%Y') if item.policy.start_date else '-' }}</strong></td>
-                    <td>{{ item.policy.expiration_date.strftime('%d/%m/%Y') if item.policy.expiration_date else '-' }}</td>
                     <td><span class="badge bg-{% if item.days_until <= 2 %}danger{% elif item.days_until <= 7 %}warning{% else %}info{% endif %}">{{ item.days_until }}</span></td>
+                    <td>
+                        <div class="btn-group btn-group-sm" role="group">
+                            <input type="radio" class="btn-check" name="agent_{{ item.policy.id }}" id="3p_{{ item.policy.id }}" value="3p" checked>
+                            <label class="btn btn-outline-info" for="3p_{{ item.policy.id }}">3P</label>
+                            <input type="radio" class="btn-check" name="agent_{{ item.policy.id }}" id="ca_{{ item.policy.id }}" value="ca">
+                            <label class="btn btn-outline-warning" for="ca_{{ item.policy.id }}">CA</label>
+                        </div>
+                    </td>
                     <td>{% if item.sent %}<span class="badge bg-success">Sent</span>{% elif item.queued %}<span class="badge bg-primary">Queued</span>{% else %}<span class="badge bg-secondary">-</span>{% endif %}</td>
                 </tr>
                 {% endfor %}
@@ -82,6 +93,7 @@
     function toggleAll(cb){document.querySelectorAll('input[name=selected]:not(:disabled)').forEach(el=>el.checked=cb.checked);}
     function selectAll(){document.querySelectorAll('input[name=selected]:not(:disabled)').forEach(el=>el.checked=true);}
     function deselectAll(){document.querySelectorAll('input[name=selected]').forEach(el=>el.checked=false);}
+    function setAllAgent(agent){document.querySelectorAll('input[type=radio][value='+agent+']').forEach(el=>el.checked=true);}
     </script>
 </body>
 </html>

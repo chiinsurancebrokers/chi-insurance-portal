@@ -474,7 +474,7 @@ def admin_renewals():
 @app.route('/admin/renewals/queue', methods=['POST'])
 @admin_required
 def admin_queue_emails():
-    """Queue selected emails"""
+    """Queue selected emails with agent selection (3P or CA)"""
     selected_ids = request.form.getlist('selected')
     
     if not selected_ids:
@@ -508,12 +508,15 @@ def admin_queue_emails():
             if existing:
                 continue
             
-            # Generate email content
+            # Get agent selection for this policy (3p or ca)
+            agent = request.form.get(f'agent_{policy_id}', '3p')
+            
+            # Generate email content with agent bank accounts
             has_greek = any(ord(char) > 127 for char in client.name)
             language = 'el' if has_greek else 'en'
-            days_until = (payment.due_date - datetime.now().date()).days
+            days_until = (policy.start_date - datetime.now().date()).days if policy.start_date else (payment.due_date - datetime.now().date()).days
             
-            subject, body = generate_renewal_email(client, policy, payment, days_until, language)
+            subject, body = generate_renewal_email(client, policy, payment, days_until, language, agent)
             
             # Queue email
             email = EmailQueue(
@@ -628,13 +631,37 @@ def admin_send_email(email_id):
     
     return redirect(url_for("admin_email_queue"))
 
-def generate_renewal_email(client, policy, payment, days_until, language):
-    """Generate email subject and body"""
+def generate_renewal_email(client, policy, payment, days_until, language, agent='3p'):
+    """Generate email subject and body with bank accounts based on agent (3p or ca)"""
     from datetime import date
     
     # Seasonal greeting (Happy New Year until Feb 1st)
     today = date.today()
     show_new_year = today.month == 1 or (today.month == 2 and today.day == 1)
+    
+    # Bank accounts based on agent selection
+    if agent == '3p':
+        bank_info = """
+    <h3 style="color: #1976d2;">Τραπεζικοί Λογαριασμοί</h3>
+    <p style="font-size: 13px; color: #555;"><strong>ΔΙΚΑΙΟΥΧΟΣ: 3P INSURANCE AGENTS AE - ΑΦΜ 800478440</strong></p>
+    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <tr style="background: #f5f5f5;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>ALPHA BANK</strong></td><td style="padding: 8px; border: 1px solid #ddd;">GR4801401340134002320003540</td></tr>
+        <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>ΕΘΝΙΚΗ ΤΡΑΠΕΖΑ</strong></td><td style="padding: 8px; border: 1px solid #ddd;">GR3901108910000089147029808</td></tr>
+        <tr style="background: #f5f5f5;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>EUROBANK</strong></td><td style="padding: 8px; border: 1px solid #ddd;">GR3302602210000370200676490</td></tr>
+        <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>ΠΕΙΡΑΙΩΣ</strong></td><td style="padding: 8px; border: 1px solid #ddd;">GR6201720890005089072164520</td></tr>
+    </table>"""
+    else:
+        bank_info = """
+    <h3 style="color: #1976d2;">Τραπεζικοί Λογαριασμοί</h3>
+    <p style="font-size: 13px; color: #555;"><strong>ΔΙΚΑΙΟΥΧΟΣ: CA Insurance Agents - ΑΦΜ 800338387</strong></p>
+    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+        <tr style="background: #f5f5f5;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>ALPHA BANK</strong></td><td style="padding: 8px; border: 1px solid #ddd;">GR4101401460146002320015029</td></tr>
+        <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>EUROBANK</strong></td><td style="padding: 8px; border: 1px solid #ddd;">GR6802600270000300201693054</td></tr>
+        <tr style="background: #f5f5f5;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>ΕΘΝΙΚΗ ΤΡΑΠΕΖΑ</strong></td><td style="padding: 8px; border: 1px solid #ddd;">GR7301106690000066900657306</td></tr>
+    </table>"""
+    
+    # Get start date
+    start_date_str = policy.start_date.strftime('%d/%m/%Y') if policy.start_date else payment.due_date.strftime('%d/%m/%Y')
     
     if language == 'el':
         new_year_greeting = """
@@ -649,26 +676,20 @@ def generate_renewal_email(client, policy, payment, days_until, language):
     {new_year_greeting}
     <h2 style="color: #d32f2f;">Υπενθύμιση Ανανέωσης Ασφαλιστηρίου</h2>
     <p>Αγαπητή/έ <strong>{client.name}</strong>,</p>
-    <p>Σας ενημερώνουμε ότι το ασφαλιστήριό σας πλησιάζει στη λήξη του.</p>
+    <p>Σας ενημερώνουμε ότι το ασφαλιστήριό σας πλησιάζει στην ημερομηνία πληρωμής.</p>
     <div style="background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 20px 0;">
-        <strong>Υπολείπονται {days_until} {'ημέρα' if days_until == 1 else 'ημέρες'} μέχρι τη λήξη</strong>
+        <strong>Υπολείπονται {days_until} {'ημέρα' if days_until == 1 else 'ημέρες'} μέχρι την πληρωμή</strong>
     </div>
     <h3 style="color: #1976d2;">Στοιχεία Ασφαλιστηρίου</h3>
     <table style="width: 100%; border-collapse: collapse;">
-        <tr style="background: #f5f5f5;">
-            <td style="padding: 10px; border: 1px solid #ddd;"><strong>Είδος:</strong></td>
-            <td style="padding: 10px; border: 1px solid #ddd;">{policy.policy_type}</td>
-        </tr>
-        {'<tr><td style="padding: 10px; border: 1px solid #ddd;"><strong>Πινακίδα:</strong></td><td style="padding: 10px; border: 1px solid #ddd;">' + policy.license_plate + '</td></tr>' if policy.license_plate else ''}
-        <tr style="background: #f5f5f5;">
-            <td style="padding: 10px; border: 1px solid #ddd;"><strong>Ασφάλιστρο:</strong></td>
-            <td style="padding: 10px; border: 1px solid #ddd;">€{payment.amount:.2f}</td>
-        </tr>
-        <tr>
-            <td style="padding: 10px; border: 1px solid #ddd;"><strong>Ημερομηνία Λήξης:</strong></td>
-            <td style="padding: 10px; border: 1px solid #ddd;">{payment.due_date.strftime('%d/%m/%Y')}</td>
-        </tr>
+        <tr style="background: #f5f5f5;"><td style="padding: 10px; border: 1px solid #ddd;"><strong>Είδος:</strong></td><td style="padding: 10px; border: 1px solid #ddd;">{policy.policy_type}</td></tr>
+        <tr><td style="padding: 10px; border: 1px solid #ddd;"><strong>Ασφαλιστική:</strong></td><td style="padding: 10px; border: 1px solid #ddd;">{policy.provider}</td></tr>
+        {'<tr style="background: #f5f5f5;"><td style="padding: 10px; border: 1px solid #ddd;"><strong>Πινακίδα:</strong></td><td style="padding: 10px; border: 1px solid #ddd;">' + policy.license_plate + '</td></tr>' if policy.license_plate else ''}
+        <tr><td style="padding: 10px; border: 1px solid #ddd;"><strong>Ασφάλιστρο:</strong></td><td style="padding: 10px; border: 1px solid #ddd;"><strong style="color: #d32f2f;">€{payment.amount:.2f}</strong></td></tr>
+        <tr style="background: #f5f5f5;"><td style="padding: 10px; border: 1px solid #ddd;"><strong>Ημερομηνία Έναρξης:</strong></td><td style="padding: 10px; border: 1px solid #ddd;"><strong>{start_date_str}</strong></td></tr>
     </table>
+    {bank_info}
+    <p style="margin-top: 20px; font-size: 12px; color: #666;"><em>Για την άμεση και ορθή εξόφληση παρακαλούμε να αναγράψετε το ονοματεπώνυμό σας στην αιτιολογία της κατάθεσης.</em></p>
     <p style="margin-top: 30px;">Με εκτίμηση,<br><strong>CHI Insurance Brokers</strong></p>
 </div></body></html>"""
     else:
@@ -684,10 +705,10 @@ def generate_renewal_email(client, policy, payment, days_until, language):
     {new_year_en}
     <h2>Insurance Renewal Reminder</h2>
     <p>Dear <strong>{client.name}</strong>,</p>
-    <p>Your insurance policy is approaching expiration.</p>
-    <p><strong>{days_until} days remaining</strong></p>
-    <p><strong>Amount:</strong> €{payment.amount:.2f}<br>
-    <strong>Expires:</strong> {payment.due_date.strftime('%d/%m/%Y')}</p>
+    <p>Your insurance policy payment is approaching.</p>
+    <p><strong>{days_until} days until payment</strong></p>
+    <p><strong>Amount:</strong> €{payment.amount:.2f}<br><strong>Start Date:</strong> {start_date_str}</p>
+    {bank_info}
     <p>Best regards,<br><strong>CHI Insurance Brokers</strong></p>
 </div></body></html>"""
     
