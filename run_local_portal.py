@@ -425,12 +425,15 @@ def admin_renewals():
     
     try:
         today = datetime.now().date()
-        thirty_days = today + timedelta(days=30)
+        # Get days filter from query param (default 30 days)
+        days_ahead = request.args.get('days', 30, type=int)
+        future_date = today + timedelta(days=days_ahead)
         
+        # Filter by start_date (when payment is due)
         policies = db_session.query(Policy).filter(
-            Policy.expiration_date.between(today, thirty_days),
+            Policy.start_date.between(today, future_date),
             Policy.status == PolicyStatus.ACTIVE
-        ).order_by(Policy.expiration_date).all()
+        ).order_by(Policy.start_date).all()
         
         renewal_list = []
         for policy in policies:
@@ -445,7 +448,7 @@ def admin_renewals():
                 ).first()
                 
                 if payment:
-                    days_until = (policy.expiration_date - today).days
+                    days_until = (policy.start_date - today).days
                     
                     # Check if already queued
                     queued = db_session.query(EmailQueue).filter_by(
@@ -906,7 +909,8 @@ def parse_csv_changes(filepath):
         provider = row.get('Εταιρεία', '').strip()
         license_plate = row.get('Χαρακτ/κό', '').strip() or None
         premium_str = row.get('Μικτά', '0')
-        expiry_str = row.get('Λήξη', '')
+        start_str = row.get('Έναρξη', '')  # Start date - when payment is due
+        expiry_str = row.get('Λήξη', '')   # Expiry date - when coverage ends
         
         if not client_name:
             continue
@@ -942,7 +946,18 @@ def parse_csv_changes(filepath):
         except:
             premium = 0.0
         
-        # Parse expiry date
+        # Parse start date (Έναρξη - when payment is due)
+        start_date = None
+        if start_str:
+            try:
+                if '-' in start_str:
+                    start_date = datetime.strptime(start_str.split()[0], '%Y-%m-%d').date()
+                elif '/' in start_str:
+                    start_date = datetime.strptime(start_str, '%d/%m/%Y').date()
+            except:
+                pass
+        
+        # Parse expiry date (Λήξη - when coverage ends)
         expiry_date = None
         if expiry_str:
             try:
@@ -981,6 +996,7 @@ def parse_csv_changes(filepath):
                 'provider': provider,
                 'license_plate': license_plate,
                 'premium': premium,
+                'start_date': start_date,
                 'expiry_date': expiry_date
             })
             continue
@@ -1007,6 +1023,7 @@ def parse_csv_changes(filepath):
                 'provider': provider,
                 'license_plate': license_plate,
                 'premium': premium,
+                'start_date': start_date,
                 'expiry_date': expiry_date
             })
         elif existing.premium != premium or existing.expiration_date != expiry_date:
@@ -1056,7 +1073,7 @@ def commit_csv_changes(changes):
                 license_plate=item['license_plate'],
                 premium=item['premium'],
                 expiration_date=item['expiry_date'],
-                start_date=datetime.now().date(),
+                start_date=item.get('start_date') or datetime.now().date(),
                 status=PolicyStatus.ACTIVE
             )
             db_session.add(policy)
@@ -1084,7 +1101,7 @@ def commit_csv_changes(changes):
                 license_plate=item['license_plate'],
                 premium=item['premium'],
                 expiration_date=item['expiry_date'],
-                start_date=datetime.now().date(),
+                start_date=item.get('start_date') or datetime.now().date(),
                 status=PolicyStatus.ACTIVE
             )
             db_session.add(policy)
