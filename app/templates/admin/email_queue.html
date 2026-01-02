@@ -17,118 +17,44 @@
             </div>
         </div>
     </nav>
-    
     <div class="container mt-4">
         <h2><i class="bi bi-envelope-paper"></i> Email Queue</h2>
         <p class="text-muted">Preview and send queued renewal emails</p>
-        
         {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                <div class="alert alert-{{ category }} alert-dismissible fade show">
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-                {% endfor %}
-            {% endif %}
+        {% if messages %}{% for category, message in messages %}
+        <div class="alert alert-{{ category }} alert-dismissible fade show">{{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+        {% endfor %}{% endif %}
         {% endwith %}
-        
         <div class="d-flex justify-content-between mb-3">
-            <div>
-                <form method="POST" action="/admin/email/test" style="display:inline;">
-                    <button type="submit" class="btn btn-success">
-                        <i class="bi bi-envelope-check"></i> Send Test Email
-                    </button>
-                </form>
-            </div>
-            <div>
-                <form method="POST" action="/admin/email-queue/clear" style="display:inline;" onsubmit="return confirm('Clear all queued/failed emails?')">
-                    <button type="submit" class="btn btn-danger">
-                        <i class="bi bi-trash"></i> Clear Queue
-                    </button>
-                </form>
-            </div>
+            <form method="POST" action="/admin/email/test" style="display:inline;"><button type="submit" class="btn btn-success"><i class="bi bi-envelope-check"></i> Send Test Email</button></form>
+            <form method="POST" action="/admin/email-queue/clear" style="display:inline;" onsubmit="return confirm('Clear all queued/failed emails?')"><button type="submit" class="btn btn-danger"><i class="bi bi-trash"></i> Clear Queue</button></form>
         </div>
-        
         {% if emails %}
         <table class="table table-hover">
-            <thead class="table-dark">
-                <tr>
-                    <th>Client</th>
-                    <th>To</th>
-                    <th>Subject</th>
-                    <th>Status</th>
-                    <th>Created</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
+            <thead class="table-dark"><tr><th>Client</th><th>To</th><th>Subject</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
             <tbody>
-                {% for email in emails %}
-                <tr>
-                    <td>{{ email.client_name }}</td>
-                    <td><small>{{ email.recipient }}</small></td>
-                    <td><small>{{ email.subject }}</small></td>
-                    <td>
-                        {% if email.status == 'SENT' %}
-                        <span class="badge bg-success">Sent</span>
-                        {% elif email.status == 'FAILED' %}
-                        <span class="badge bg-danger" title="{{ email.error }}">Failed</span>
-                        {% else %}
-                        <span class="badge bg-primary">Queued</span>
-                        {% endif %}
-                    </td>
-                    <td><small>{{ email.created.strftime('%d/%m %H:%M') }}</small></td>
-                    <td>
-                        <button type="button" class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#previewModal{{ email.id }}">
-                            <i class="bi bi-eye"></i> Preview
-                        </button>
-                        {% if email.status == 'QUEUED' or email.status == 'FAILED' %}
-                        <form method="POST" action="/admin/email/send/{{ email.id }}" style="display:inline;">
-                            <button type="submit" class="btn btn-sm btn-success">
-                                <i class="bi bi-send"></i> Send
-                            </button>
-                        </form>
-                        {% endif %}
-                    </td>
-                </tr>
-                
-                <!-- Preview Modal -->
-                <div class="modal fade" id="previewModal{{ email.id }}" tabindex="-1">
-                    <div class="modal-dialog modal-lg">
-                        <div class="modal-content">
-                            <div class="modal-header bg-primary text-white">
-                                <h5 class="modal-title"><i class="bi bi-envelope"></i> Email Preview</h5>
-                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                            </div>
-                            <div class="modal-body">
-                                <p><strong>To:</strong> {{ email.recipient }}</p>
-                                <p><strong>Subject:</strong> {{ email.subject }}</p>
-                                <hr>
-                                <div class="border p-3" style="background: #f9f9f9;">
-                                    {{ email.body_html|safe }}
-                                </div>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                {% if email.status == 'QUEUED' or email.status == 'FAILED' %}
-                                <form method="POST" action="/admin/email/send/{{ email.id }}" style="display:inline;">
-                                    <button type="submit" class="btn btn-success">
-                                        <i class="bi bi-send"></i> Send Now
-                                    </button>
-                                </form>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% endfor %}
+            {% for email in emails %}
+            <tr>
+                <td>{{ email.client_name }}</td>
+                <td><small>{{ email.recipient }}</small></td>
+                <td><small>{{ email.subject }}</small></td>
+                <td>{% if email.status == 'SENT' %}<span class="badge bg-success">Sent</span>{% elif email.status == 'FAILED' %}<span class="badge bg-danger">Failed</span>{% else %}<span class="badge bg-primary">Queued</span>{% endif %}</td>
+                <td><small>{{ email.created.strftime('%d/%m %H:%M') }}</small></td>
+                <td>
+                    <button type="button" class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#pm{{ email.id }}"><i class="bi bi-eye"></i></button>
+                    {% if email.status == 'QUEUED' or email.status == 'FAILED' %}<form method="POST" action="/admin/email/send/{{ email.id }}" style="display:inline;"><button type="submit" class="btn btn-sm btn-success"><i class="bi bi-send"></i></button></form>{% endif %}
+                </td>
+            </tr>
+            <div class="modal fade" id="pm{{ email.id }}" tabindex="-1"><div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
+                <div class="modal-header bg-primary text-white"><h5 class="modal-title">Email Preview</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body" style="max-height:70vh;overflow-y:auto;"><p><strong>To:</strong> {{ email.recipient }}</p><p><strong>Subject:</strong> {{ email.subject }}</p><hr><div class="border p-3" style="background:#f9f9f9;">{{ email.body_html|safe }}</div></div>
+                <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>{% if email.status == 'QUEUED' or email.status == 'FAILED' %}<form method="POST" action="/admin/email/send/{{ email.id }}" style="display:inline;"><button type="submit" class="btn btn-success"><i class="bi bi-send"></i> Send</button></form>{% endif %}</div>
+            </div></div></div>
+            {% endfor %}
             </tbody>
         </table>
-        {% else %}
-        <div class="alert alert-info">No queued emails</div>
-        {% endif %}
+        {% else %}<div class="alert alert-info">No queued emails</div>{% endif %}
     </div>
-    
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
