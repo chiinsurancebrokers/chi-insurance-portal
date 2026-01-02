@@ -629,10 +629,23 @@ def admin_send_email(email_id):
 
 def generate_renewal_email(client, policy, payment, days_until, language):
     """Generate email subject and body"""
+    from datetime import date
+    
+    # Seasonal greeting (Happy New Year until Feb 1st)
+    today = date.today()
+    show_new_year = today.month == 1 or (today.month == 2 and today.day == 1)
+    
     if language == 'el':
+        new_year_greeting = """
+    <div style="background: linear-gradient(135deg, #1a237e 0%, #4a148c 100%); padding: 20px; border-radius: 10px; margin-bottom: 25px; text-align: center;">
+        <h2 style="color: #ffd700; margin: 0; font-size: 24px;">🎉 Καλή Χρονιά 2026! 🎉</h2>
+        <p style="color: #ffffff; margin: 10px 0 0 0;">Σας ευχόμαστε υγεία, ευτυχία και ευημερία!</p>
+    </div>""" if show_new_year else ""
+        
         subject = f"Ανανέωση Ασφαλιστηρίου - {policy.policy_type}"
         body = f"""<html><body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
 <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+    {new_year_greeting}
     <h2 style="color: #d32f2f;">Υπενθύμιση Ανανέωσης Ασφαλιστηρίου</h2>
     <p>Αγαπητή/έ <strong>{client.name}</strong>,</p>
     <p>Σας ενημερώνουμε ότι το ασφαλιστήριό σας πλησιάζει στη λήξη του.</p>
@@ -658,9 +671,16 @@ def generate_renewal_email(client, policy, payment, days_until, language):
     <p style="margin-top: 30px;">Με εκτίμηση,<br><strong>CHI Insurance Brokers</strong></p>
 </div></body></html>"""
     else:
+        new_year_en = """
+    <div style="background: linear-gradient(135deg, #1a237e 0%, #4a148c 100%); padding: 20px; border-radius: 10px; margin-bottom: 25px; text-align: center;">
+        <h2 style="color: #ffd700; margin: 0; font-size: 24px;">🎉 Happy New Year 2026! 🎉</h2>
+        <p style="color: #ffffff; margin: 10px 0 0 0;">Wishing you health, happiness and prosperity!</p>
+    </div>""" if show_new_year else ""
+        
         subject = f"Insurance Renewal - {policy.policy_type}"
         body = f"""<html><body style="font-family: Arial, sans-serif;">
 <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+    {new_year_en}
     <h2>Insurance Renewal Reminder</h2>
     <p>Dear <strong>{client.name}</strong>,</p>
     <p>Your insurance policy is approaching expiration.</p>
@@ -1026,7 +1046,7 @@ def parse_csv_changes(filepath):
                 'start_date': start_date,
                 'expiry_date': expiry_date
             })
-        elif existing.premium != premium or existing.expiration_date != expiry_date:
+        elif existing.premium != premium or existing.expiration_date != expiry_date or existing.start_date != start_date:
             # Policy exists but needs update
             changes['updated_policies'].append({
                 'client_name': client_name,
@@ -1035,6 +1055,8 @@ def parse_csv_changes(filepath):
                 'license_plate': license_plate,
                 'old_premium': existing.premium,
                 'new_premium': premium,
+                'old_start': existing.start_date,
+                'new_start': start_date,
                 'old_expiry': existing.expiration_date,
                 'new_expiry': expiry_date
             })
@@ -1124,6 +1146,7 @@ def commit_csv_changes(changes):
             policy = db_session.query(Policy).get(item['policy_id'])
             if policy:
                 policy.premium = item['new_premium']
+                policy.start_date = item.get('new_start') or policy.start_date
                 policy.expiration_date = item['new_expiry']
                 
                 # Update or create payment
