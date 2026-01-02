@@ -852,7 +852,12 @@ def parse_csv_changes(filepath):
             continue
     if file_content is None:
         raise Exception('Could not decode file')
-    first_line = file_content.split(chr(10))[0]
+    # Get header line (skip title row if present)
+    lines = file_content.split(chr(10))
+    first_line = lines[0]
+    # Check if first line is title row
+    if 'Παραγωγή' in first_line and 'Πελάτης' not in first_line:
+        first_line = lines[1] if len(lines) > 1 else first_line
     is_3p = 'INSURANCE COMPANY' in first_line.upper()
     
     changes = {
