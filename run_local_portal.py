@@ -555,6 +555,7 @@ def admin_email_queue():
                 'client_name': email.client.name,
                 'recipient': email.recipient_email,
                 'subject': email.subject,
+                'body_html': email.body_html,
                 'status': email.status.value,
                 'sent_at': email.sent_at,
                 'error': email.error_message,

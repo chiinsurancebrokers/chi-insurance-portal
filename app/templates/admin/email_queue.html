@@ -20,7 +20,7 @@
     
     <div class="container mt-4">
         <h2><i class="bi bi-envelope-paper"></i> Email Queue</h2>
-        <p class="text-muted">Send queued renewal emails one by one using Gmail</p>
+        <p class="text-muted">Preview and send queued renewal emails</p>
         
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
@@ -59,7 +59,7 @@
                     <th>Subject</th>
                     <th>Status</th>
                     <th>Created</th>
-                    <th>Action</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -79,17 +79,48 @@
                     </td>
                     <td><small>{{ email.created.strftime('%d/%m %H:%M') }}</small></td>
                     <td>
+                        <button type="button" class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#previewModal{{ email.id }}">
+                            <i class="bi bi-eye"></i> Preview
+                        </button>
                         {% if email.status == 'QUEUED' or email.status == 'FAILED' %}
                         <form method="POST" action="/admin/email/send/{{ email.id }}" style="display:inline;">
                             <button type="submit" class="btn btn-sm btn-success">
                                 <i class="bi bi-send"></i> Send
                             </button>
                         </form>
-                        {% else %}
-                        <span class="text-muted">-</span>
                         {% endif %}
                     </td>
                 </tr>
+                
+                <!-- Preview Modal -->
+                <div class="modal fade" id="previewModal{{ email.id }}" tabindex="-1">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header bg-primary text-white">
+                                <h5 class="modal-title"><i class="bi bi-envelope"></i> Email Preview</h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p><strong>To:</strong> {{ email.recipient }}</p>
+                                <p><strong>Subject:</strong> {{ email.subject }}</p>
+                                <hr>
+                                <div class="border p-3" style="background: #f9f9f9;">
+                                    {{ email.body_html|safe }}
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                {% if email.status == 'QUEUED' or email.status == 'FAILED' %}
+                                <form method="POST" action="/admin/email/send/{{ email.id }}" style="display:inline;">
+                                    <button type="submit" class="btn btn-success">
+                                        <i class="bi bi-send"></i> Send Now
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 {% endfor %}
             </tbody>
         </table>
