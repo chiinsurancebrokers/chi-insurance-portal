@@ -988,8 +988,16 @@ def parse_csv_changes(filepath):
         
         # Parse premium (Greek format: 1.234,56 -> 1234.56)
         try:
-            premium_str = premium_str.replace('.', '').replace(',', '.')
-            premium = float(premium_str)
+            # Remove thousands separator (.) then replace decimal separator (, -> .)
+            clean_premium = premium_str.strip()
+            if ',' in clean_premium:
+                # Greek format: 1.234,56 or 234,56
+                clean_premium = clean_premium.replace('.', '')  # Remove thousands sep
+                clean_premium = clean_premium.replace(',', '.')  # Decimal sep
+            premium = float(clean_premium) if clean_premium else 0.0
+            # Sanity check: premiums over 50000 are likely parsing errors
+            if premium > 50000:
+                print(f'WARNING: Unusual premium {premium} for {client_name} - original: {premium_str}')
         except:
             premium = 0.0
         
@@ -1088,6 +1096,7 @@ def parse_csv_changes(filepath):
             changes['updated_policies'].append({
                 'client_name': client_name,
                 'policy_id': existing.id,
+                'policy_number': policy_number,
                 'policy_type': policy_type,
                 'license_plate': license_plate,
                 'old_premium': existing.premium,
@@ -1185,6 +1194,7 @@ def commit_csv_changes(changes):
             policy = db_session.query(Policy).get(item['policy_id'])
             if policy:
                 policy.premium = item['new_premium']
+                policy.policy_number = item.get('policy_number') or policy.policy_number
                 policy.start_date = item.get('new_start') or policy.start_date
                 policy.expiration_date = item['new_expiry']
                 
