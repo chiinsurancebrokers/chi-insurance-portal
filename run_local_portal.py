@@ -947,8 +947,22 @@ def parse_csv_changes(filepath):
         if line_num <= 3:
             print(f'DEBUG row {line_num}: {client_name} | {policy_type} | {provider} | {premium} | {expiry_date}')
         
-        # Check if client exists in database
+        # Check if client exists in database (normalize name for matching)
+        # Try exact match first
         client = db_session.query(Client).filter_by(name=client_name).first()
+        
+        # If not found, try normalized match (handle spaces around dashes)
+        if not client:
+            normalized_name = client_name.replace(' - ', '-').replace('- ', '-').replace(' -', '-').strip()
+            client = db_session.query(Client).filter_by(name=normalized_name).first()
+            
+            # Also search all clients with normalized comparison
+            if not client:
+                for c in db_session.query(Client).all():
+                    db_norm = c.name.replace(' - ', '-').replace('- ', '-').replace(' -', '-').strip()
+                    if db_norm == normalized_name:
+                        client = c
+                        break
         
         if not client:
             changes['new_clients'].append({
@@ -1004,7 +1018,7 @@ def parse_csv_changes(filepath):
                 'policy_type': policy_type
             })
     
-    print(f'DEBUG RESULTS: new_clients={len(changes["new_clients"])}, new_policies={len(changes["new_policies"])}, updated={len(changes["updated_policies"])}, unchanged={len(changes["unchanged"])}')
+    print(f'DEBUG RESULTS: new_clients={len(changes["new_clients"])} (with policies), new_policies_for_existing_clients={len(changes["new_policies"])}, updated={len(changes["updated_policies"])}, unchanged={len(changes["unchanged"])}')
     
     db_session.close()
     return changes
