@@ -951,6 +951,7 @@ def parse_csv_changes(filepath):
         
         # Extract data from Production Report format
         client_name = row.get('Πελάτης', '').strip()
+        policy_number = row.get('Συμβόλαιο', '').strip()  # Policy number - unique identifier
         policy_type_raw = row.get('Κλάδος', '').strip()
         provider = row.get('Εταιρεία', '').strip()
         license_plate = row.get('Χαρακτ/κό', '').strip() or None
@@ -1038,6 +1039,7 @@ def parse_csv_changes(filepath):
         if not client:
             changes['new_clients'].append({
                 'name': client_name,
+                'policy_number': policy_number,
                 'policy_type': policy_type,
                 'provider': provider,
                 'license_plate': license_plate,
@@ -1047,13 +1049,21 @@ def parse_csv_changes(filepath):
             })
             continue
         
-        # Check if policy exists for this client
-        if license_plate:
+        # Check if policy exists for this client (use policy_number as primary identifier)
+        existing = None
+        if policy_number:
+            existing = db_session.query(Policy).filter_by(
+                policy_number=policy_number
+            ).first()
+        
+        # Fallback: check by license plate or type/provider
+        if not existing and license_plate:
             existing = db_session.query(Policy).filter_by(
                 client_id=client.id,
                 license_plate=license_plate
             ).first()
-        else:
+        
+        if not existing:
             existing = db_session.query(Policy).filter_by(
                 client_id=client.id,
                 policy_type=policy_type,
@@ -1065,6 +1075,7 @@ def parse_csv_changes(filepath):
             changes['new_policies'].append({
                 'client_name': client_name,
                 'client_id': client.id,
+                'policy_number': policy_number,
                 'policy_type': policy_type,
                 'provider': provider,
                 'license_plate': license_plate,
@@ -1116,6 +1127,7 @@ def commit_csv_changes(changes):
             
             policy = Policy(
                 client_id=client.id,
+                policy_number=item.get('policy_number'),
                 policy_type=item['policy_type'],
                 provider=item['provider'],
                 license_plate=item['license_plate'],
@@ -1144,6 +1156,7 @@ def commit_csv_changes(changes):
         for item in changes['new_policies']:
             policy = Policy(
                 client_id=item['client_id'],
+                policy_number=item.get('policy_number'),
                 policy_type=item['policy_type'],
                 provider=item['provider'],
                 license_plate=item['license_plate'],

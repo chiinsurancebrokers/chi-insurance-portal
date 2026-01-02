@@ -62,6 +62,7 @@ class Policy(Base):
     
     id = Column(Integer, primary_key=True)
     client_id = Column(Integer, ForeignKey('clients.id'), nullable=False)
+    policy_number = Column(String(50))  # Unique policy number from insurance company
     policy_type = Column(String(100), nullable=False)
     provider = Column(String(100))
     license_plate = Column(String(20))
