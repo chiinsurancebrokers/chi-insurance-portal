@@ -920,15 +920,16 @@ def parse_csv_changes(filepath):
             except:
                 premium = 0.0
             
+            # Parse expiry date
+            expiry_date = None
             try:
-                if expiry_str:  # Only parse if not already parsed
+                if expiry_str:
                     if '-' in expiry_str:
                         expiry_date = datetime.strptime(expiry_str.split()[0], '%Y-%m-%d').date()
-                    else:
+                    elif '/' in expiry_str:
                         expiry_date = datetime.strptime(expiry_str, '%d/%m/%Y').date()
             except:
-                if 'expiry_date' not in dir():
-                    expiry_date = None
+                expiry_date = None
             
             # Check if client exists
             client = db_session.query(Client).filter_by(name=client_name).first()
