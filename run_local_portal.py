@@ -832,16 +832,44 @@ def admin_csv_commit():
     return redirect(url_for('admin_csv_upload'))
 
 def parse_csv_changes(filepath):
-    """Parse CSV and detect changes"""
+    """Parse CSV file with multi-encoding support for Greek files"""
     import csv
     from datetime import datetime
     
     db_session = get_session()
     
+    # Try multiple encodings for Greek files
+    encodings = ['utf-8-sig', 'utf-8', 'windows-1253', 'iso-8859-7', 'cp1253', 'cp1252', 'latin1']
+    file_content = None
+    
+    for enc in encodings:
+        try:
+            with open(filepath, 'r', encoding=enc) as f:
+                file_content = f.read()
+            break
+        except UnicodeDecodeError:
+            continue
+    
+    if file_content is None:
+        raise Exception("Could not decode file with any known encoding")
+    
+    lines = file_content.strip().split('\n')
+    
+    # Find header row
+    header_idx = 0
+    for i, line in enumerate(lines):
+        if 'Πελάτης' in line or 'CLIENT' in line.upper() or 'INSURANCE COMPANY' in line.upper() or 'Ονοματεπώνυμο' in line:
+            header_idx = i
+            break
+    
+    header_line = lines[header_idx]
+    delimiter = ';' if ';' in header_line else ','
+    header = [h.strip().strip('"') for h in header_line.split(delimiter)]
+    
     # Detect format
-    with open(filepath, 'r', encoding='utf-8-sig') as f:
-        first_line = f.readline()
-        is_3p = 'INSURANCE COMPANY' in first_line.upper()
+    is_production_report = 'Χαρακτ/κό' in header or 'Πελάτης' in header
+    is_3p_format = 'INSURANCE COMPANY' in [h.upper() for h in header]
+    is_hellas_direct = 'Ονοματεπώνυμο' in header
     
     changes = {
         'new_policies': [],
@@ -850,93 +878,207 @@ def parse_csv_changes(filepath):
         'new_clients': []
     }
     
-    with open(filepath, 'r', encoding='utf-8-sig') as f:
-        reader = csv.DictReader(f, delimiter=';' if ';' in first_line else ',')
+    for line in lines[header_idx + 1:]:
+        if not line.strip() or line.strip().startswith(';;;'):
+            continue
         
-        for row in reader:
-            if is_3p:
-                client_name = row.get('CLIENT NAME', '').strip()
-                policy_type = row.get('INSURANCE TYPE', '').strip()
-                provider = row.get('INSURANCE COMPANY', '').strip()
-                license_plate = row.get('LICENSE PLATE', '').strip() or None
-                premium_str = row.get('PREMIUM AMOUNT', '0').replace(',', '.')
-                expiry_str = row.get('EXPIRY DATE', '')
+        # Parse row handling quoted fields
+        values = []
+        in_quotes = False
+        current = ''
+        for char in line:
+            if char == '"':
+                in_quotes = not in_quotes
+            elif char == delimiter and not in_quotes:
+                values.append(current.strip().strip('"'))
+                current = ''
             else:
-                # Hellas Direct format
-                client_name = row.get('Ονοματεπώνυμο', '').strip()
-                policy_type = 'ΑΥΤΟΚΙΝΗΤΟ'
-                provider = 'HELLAS DIRECT'
-                license_plate = row.get('Αρ. Κυκλοφορίας', '').strip() or None
-                premium_str = row.get('Ασφάλιστρο', '0').replace(',', '.')
-                expiry_str = row.get('Λήξη', '')
-            
-            if not client_name:
-                continue
-            
-            # Parse data
+                current += char
+        values.append(current.strip().strip('"'))
+        
+        if len(values) < 6:
+            continue
+        
+        # Production Report format (Greek insurance system)
+        if is_production_report:
             try:
-                premium = float(premium_str)
+                license_plate = values[0] if values[0] and len(values[0]) < 15 and not values[0].startswith('ΜΕΤΑΦΟΡΑ') else None
+                client_name = values[1] if len(values) > 1 else ''
+                policy_type = values[5] if len(values) > 5 else ''
+                provider = values[6] if len(values) > 6 else ''
+                expiry_str = values[9] if len(values) > 9 else ''
+                premium_str = values[10] if len(values) > 10 else '0'
+                
+                if not client_name.strip():
+                    continue
+                
+                # Map Greek insurance types
+                type_map = {'ΖΩΗΣ': 'LIFE', 'ΥΓΕΙΑΣ': 'HEALTH', 'AYTOKINHTO': 'ΑΥΤΟΚΙΝΗΤΟ', 'ΠΥΡΟΣ': 'PROPERTY', 'ΠΥΡΟΣ-ΠΕΡΙΟΥΣΙΑΣ': 'PROPERTY'}
+                policy_type = type_map.get(policy_type, policy_type)
+                
             except:
-                premium = 0.0
-            
-            try:
-                expiry_date = datetime.strptime(expiry_str, '%d/%m/%Y').date()
-            except:
-                expiry_date = None
-            
-            # Check if client exists
-            client = db_session.query(Client).filter_by(name=client_name).first()
-            
-            if not client:
-                changes['new_clients'].append({
-                    'name': client_name,
-                    'policy_type': policy_type,
-                    'provider': provider,
-                    'license_plate': license_plate,
-                    'premium': premium,
-                    'expiry_date': expiry_date
-                })
                 continue
-            
-            # Check if policy exists
-            if license_plate:
-                existing = db_session.query(Policy).filter_by(
-                    client_id=client.id,
-                    license_plate=license_plate
-                ).first()
-            else:
-                existing = db_session.query(Policy).filter_by(
-                    client_id=client.id,
-                    policy_type=policy_type,
-                    provider=provider
-                ).first()
-            
-            if not existing:
-                changes['new_policies'].append({
-                    'client_name': client_name,
-                    'client_id': client.id,
-                    'policy_type': policy_type,
-                    'provider': provider,
-                    'license_plate': license_plate,
-                    'premium': premium,
-                    'expiry_date': expiry_date
-                })
-            elif existing.premium != premium or existing.expiration_date != expiry_date:
-                changes['updated_policies'].append({
-                    'client_name': client_name,
-                    'policy_id': existing.id,
-                    'policy_type': policy_type,
-                    'license_plate': license_plate,
-                    'old_premium': existing.premium,
-                    'new_premium': premium,
-                    'old_expiry': existing.expiration_date,
-                    'new_expiry': expiry_date
-                })
-            else:
-                changes['unchanged'].append({
-                    'client_name': client_name,
-                    'policy_type': policy_type
-                })
+        elif is_3p_format:
+            client_name = values[0] if len(values) > 0 else ''
+            policy_type = values[1] if len(values) > 1 else ''
+            provider = values[2] if len(values) > 2 else ''
+            license_plate = values[3] if len(values) > 3 and values[3] else None
+            premium_str = values[4] if len(values) > 4 else '0'
+            expiry_str = values[5] if len(values) > 5 else ''
+        else:
+            # Hellas Direct format
+            client_name = values[0] if len(values) > 0 else ''
+            policy_type = 'ΑΥΤΟΚΙΝΗΤΟ'
+            provider = 'HELLAS DIRECT'
+            license_plate = values[1] if len(values) > 1 else None
+            premium_str = values[2] if len(values) > 2 else '0'
+            expiry_str = values[3] if len(values) > 3 else ''
+        
+        if not client_name.strip():
+            continue
+        
+        # Parse premium (handle Greek format: 286,22)
+        try:
+            premium_str = premium_str.replace('.', '').replace(',', '.')
+            premium = float(premium_str)
+        except:
+            premium = 0.0
+        
+        # Parse expiry date
+        expiry_date = None
+        if expiry_str:
+            try:
+                if '-' in expiry_str:
+                    expiry_date = datetime.strptime(expiry_str.split()[0], '%Y-%m-%d').date()
+                elif '/' in expiry_str:
+                    expiry_date = datetime.strptime(expiry_str, '%d/%m/%Y').date()
+            except:
+                pass
+        
+        # Check if client exists
+        client = db_session.query(Client).filter_by(name=client_name.strip()).first()
+        
+        if not client:
+            changes['new_clients'].append({
+                'name': client_name.strip(),
+                'policy_type': policy_type,
+                'provider': provider,
+                'license_plate': license_plate,
+                'premium': premium,
+                'expiry_date': expiry_date
+            })
+            continue
+        
+        # Check if policy exists
+        if license_plate:
+            existing = db_session.query(Policy).filter_by(
+                client_id=client.id,
+                license_plate=license_plate
+            ).first()
+        else:
+            existing = db_session.query(Policy).filter_by(
+                client_id=client.id,
+                policy_type=policy_type,
+                provider=provider
+            ).first()
+        
+        if not existing:
+            changes['new_policies'].append({
+                'client_name': client_name.strip(),
+                'client_id': client.id,
+                'policy_type': policy_type,
+                'provider': provider,
+                'license_plate': license_plate,
+                'premium': premium,
+                'expiry_date': expiry_date
+            })
+        elif existing.premium != premium or existing.expiration_date != expiry_date:
+            changes['updated_policies'].append({
+                'client_name': client_name.strip(),
+                'policy_id': existing.id,
+                'policy_type': policy_type,
+                'license_plate': license_plate,
+                'old_premium': existing.premium,
+                'new_premium': premium,
+                'old_expiry': existing.expiration_date,
+                'new_expiry': expiry_date
+            })
+        else:
+            changes['unchanged'].append({
+                'client_name': client_name.strip(),
+                'policy_type': policy_type
+            })
+    
+    db_session.close()
+    return changes
+
+        except:
+            premium = 0.0
+        
+        # Parse expiry date
+        expiry_date = None
+        if expiry_str:
+            try:
+                if '-' in expiry_str:
+                    expiry_date = datetime.strptime(expiry_str.split()[0], '%Y-%m-%d').date()
+                elif '/' in expiry_str:
+                    expiry_date = datetime.strptime(expiry_str, '%d/%m/%Y').date()
+            except:
+                pass
+        
+        # Check if client exists
+        client = db_session.query(Client).filter_by(name=client_name.strip()).first()
+        
+        if not client:
+            changes['new_clients'].append({
+                'name': client_name.strip(),
+                'policy_type': policy_type,
+                'provider': provider,
+                'license_plate': license_plate,
+                'premium': premium,
+                'expiry_date': expiry_date
+            })
+            continue
+        
+        # Check if policy exists
+        if license_plate:
+            existing = db_session.query(Policy).filter_by(
+                client_id=client.id,
+                license_plate=license_plate
+            ).first()
+        else:
+            existing = db_session.query(Policy).filter_by(
+                client_id=client.id,
+                policy_type=policy_type,
+                provider=provider
+            ).first()
+        
+        if not existing:
+            changes['new_policies'].append({
+                'client_name': client_name.strip(),
+                'client_id': client.id,
+                'policy_type': policy_type,
+                'provider': provider,
+                'license_plate': license_plate,
+                'premium': premium,
+                'expiry_date': expiry_date
+            })
+        elif existing.premium != premium or existing.expiration_date != expiry_date:
+            changes['updated_policies'].append({
+                'client_name': client_name.strip(),
+                'policy_id': existing.id,
+                'policy_type': policy_type,
+                'license_plate': license_plate,
+                'old_premium': existing.premium,
+                'new_premium': premium,
+                'old_expiry': existing.expiration_date,
+                'new_expiry': expiry_date
+            })
+        else:
+            changes['unchanged'].append({
+                'client_name': client_name.strip(),
+                'policy_type': policy_type
+            })
     
     db_session.close()
     return changes
@@ -1159,6 +1301,37 @@ def admin_delete_policy(policy_id):
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
+
+# =========================
+# ADMIN PASSWORD LOGIN (TEMP)
+# =========================
+import os
+
+ADMIN_ALLOWED_LOGINS = {"admin", "info@chiinsurancebrokers.com"}
+# Works now with default, but can be overridden securely by env var:
+# export CHI_ADMIN_PASSWORD="admin2025!"
+ADMIN_PASSWORD = os.getenv("CHI_ADMIN_PASSWORD", "admin2025!")
+
+@app.route("/admin-login", methods=["GET", "POST"])
+def admin_login_password_v2():
+    if request.method == "POST":
+        login_id = (request.form.get("login") or "").strip().lower()
+        password = request.form.get("password") or ""
+
+        if login_id in ADMIN_ALLOWED_LOGINS and password == ADMIN_PASSWORD:
+            session["admin_logged_in"] = True
+            session["logged_in"] = True
+            session["user_email"] = "info@chiinsurancebrokers.com"
+            flash("Admin login successful", "success")
+            return redirect("/admin/dashboard")
+
+        flash("Invalid admin credentials", "danger")
+
+    return render_template("admin_login.html")
+
+@app.route("/admin-logout")
+def admin_logout():
+
     app.run(debug=False, host='0.0.0.0', port=port)
 
 @app.route('/admin/client/<int:client_id>/edit', methods=['GET', 'POST'])
@@ -1189,3 +1362,288 @@ def admin_edit_client(client_id):
     db_session.close()
     return render_template('admin/edit_client.html', client=client)
 
+
+# ================================
+# Clients & Policies 2025–2026 DB
+# ================================
+import sqlite3
+from pathlib import Path
+
+@app.route('/admin/clients-policies-2025-2026')
+def admin_clients_policies_2025_2026():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('login'))
+
+    db_path = Path('data/processed/clients_policy_2025_2026.db')
+
+    if not db_path.exists():
+        return render_template(
+            'admin/clients_policies_2025_2026.html',
+            rows=[],
+            q='',
+            error=f"DB not found: {db_path}"
+        )
+
+    q = (request.args.get('q') or '').strip()
+
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+
+    sql = "SELECT * FROM client_policy_2025_2026"
+    params = []
+
+    if q:
+        sql += """
+        WHERE
+            [Επωνυμία] LIKE ? OR
+            [Email] LIKE ? OR
+            [Kινητό] LIKE ? OR
+            [ΑΦΜ] LIKE ? OR
+            [Συμβόλαιο] LIKE ?
+        """
+        params = [f"%{q}%"] * 5
+
+    sql += " ORDER BY [Λήξη] ASC"
+    rows = conn.execute(sql, params).fetchall()
+    conn.close()
+
+    return render_template(
+        'admin/clients_policies_2025_2026.html',
+        rows=rows,
+        q=q,
+        error=None
+    )
+
+# =========================
+# ADMIN ACCESS CONFIG
+# =========================
+ADMIN_EMAILS = {
+    "christos@chi-insurance.gr",
+    "info@chi-insurance.gr"
+}
+
+@app.before_request
+def set_admin_from_email():
+    email = session.get("user_email")
+    if email and email.lower() in ADMIN_EMAILS:
+        session["admin_logged_in"] = True
+
+# =========================
+# FIX USER EMAIL IN SESSION
+# =========================
+@app.before_request
+def fix_user_email_session():
+    if session.get("logged_in"):
+        email = session.get("user_email") or session.get("email")
+        if email:
+            session["user_email"] = email.lower()
+
+# =========================
+# TEMP DEV LOGIN (LOCAL)
+# =========================
+@app.route('/dev-login')
+def dev_login():
+    session['logged_in'] = True
+    session['user_email'] = 'xiatropoulos@gmail.com'
+    session['admin_logged_in'] = True
+    return redirect('/admin/dashboard')
+    session.pop("admin_logged_in", None)
+    flash("Admin logged out", "info")
+    return redirect("/")
+
+# Shortcut: send users to admin password login page
+@app.route("/admin")
+def admin_shortcut():
+    return redirect("/admin-login")
+
+# =========================
+# FIXED ADMIN LOGOUT ROUTE
+# =========================
+@app.route("/admin-logout-fixed")
+def admin_logout_fixed():
+    session.pop("admin_logged_in", None)
+    flash("Admin logged out", "info")
+    return redirect("/")
+
+# =========================
+# ADMIN LOGIN DEBUG (SAFE)
+# =========================
+@app.route("/admin-login", methods=["GET", "POST"])
+def admin_login_password():
+    debug = {}
+
+    if request.method == "POST":
+        login_id = (request.form.get("login") or "").strip().lower()
+        password = request.form.get("password") or ""
+
+        debug["login_received"] = login_id
+        debug["login_allowed"] = login_id in ADMIN_ALLOWED_LOGINS
+        debug["password_length"] = len(password)
+        debug["env_password_set"] = bool(os.getenv("CHI_ADMIN_PASSWORD"))
+        debug["password_matches"] = password == ADMIN_PASSWORD
+
+        if debug["login_allowed"] and debug["password_matches"]:
+            session["admin_logged_in"] = True
+            session["logged_in"] = True
+            session["user_email"] = "info@chiinsurancebrokers.com"
+            return redirect("/admin/dashboard")
+
+    return render_template(
+        "admin_login.html",
+        debug=debug
+    )
+
+# =========================
+# ADMIN LOGIN DEBUG PAGE (SAFE)
+# =========================
+@app.route("/admin-login-debug", methods=["GET", "POST"])
+def admin_login_password_debug():
+    debug = {}
+
+    if request.method == "POST":
+        login_id = (request.form.get("login") or "").strip().lower()
+        password = request.form.get("password") or ""
+
+        debug["login_received"] = login_id
+        debug["login_allowed"] = login_id in ADMIN_ALLOWED_LOGINS
+        debug["password_length"] = len(password)
+        debug["env_password_set"] = bool(os.getenv("CHI_ADMIN_PASSWORD"))
+        debug["password_matches"] = password == ADMIN_PASSWORD
+        debug["allowed_logins"] = sorted(list(ADMIN_ALLOWED_LOGINS))
+
+        if debug["login_allowed"] and debug["password_matches"]:
+            session["admin_logged_in"] = True
+            session["logged_in"] = True
+            session["user_email"] = "info@chiinsurancebrokers.com"
+            debug["login_success"] = True
+            return redirect("/admin/dashboard")
+
+        debug["login_success"] = False
+
+    return render_template("admin_login_debug.html", debug=debug)
+
+# =========================
+# ADMIN LOGIN DEBUG v2 (STAYS ON PAGE)
+# =========================
+@app.route("/admin-login-debug2", methods=["GET", "POST"])
+def admin_login_password_debug2():
+    debug = {"note": "This page never redirects; it always shows debug JSON after POST."}
+
+    if request.method == "POST":
+        login_id = (request.form.get("login") or "").strip().lower()
+        password = request.form.get("password") or ""
+
+        debug["login_received"] = login_id
+        debug["login_allowed"] = login_id in ADMIN_ALLOWED_LOGINS
+        debug["allowed_logins"] = sorted(list(ADMIN_ALLOWED_LOGINS))
+
+        debug["password_length"] = len(password)
+        debug["env_password_set"] = bool(os.getenv("CHI_ADMIN_PASSWORD"))
+        debug["admin_password_length"] = len(ADMIN_PASSWORD)
+        debug["password_matches"] = (password == ADMIN_PASSWORD)
+
+        if debug["login_allowed"] and debug["password_matches"]:
+            session["admin_logged_in"] = True
+            session["logged_in"] = True
+            session["user_email"] = "info@chiinsurancebrokers.com"
+            debug["login_success"] = True
+        else:
+            debug["login_success"] = False
+
+    return render_template("admin_login_debug2.html", debug=debug)
+
+# =========================
+# Make /admin-login use the working debug2 logic
+# =========================
+@app.route("/admin-login-fixed")
+def admin_login_fixed_redirect():
+    return redirect("/admin-login-debug2")
+
+# =========================
+# Admin login v3 (redirects on success)
+# =========================
+@app.route("/admin-login-v3", methods=["GET", "POST"])
+def admin_login_v3():
+    debug = {}
+    if request.method == "POST":
+        login_id = (request.form.get("login") or "").strip().lower()
+        password = request.form.get("password") or ""
+
+        ok = (login_id in ADMIN_ALLOWED_LOGINS) and (password == ADMIN_PASSWORD)
+        if ok:
+            session["admin_logged_in"] = True
+            session["logged_in"] = True
+            session["user_email"] = "info@chiinsurancebrokers.com"
+            return redirect("/admin/dashboard")
+
+        debug = {"error": "Invalid admin credentials", "login_received": login_id}
+
+    return render_template("admin_login_v3.html", debug=debug)
+
+# =========================
+# ADMIN SESSION SYNC PATCH
+# =========================
+def ensure_admin_session():
+    if session.get("admin_logged_in"):
+        session["is_admin"] = True
+        session["role"] = "admin"
+        session["user_role"] = "admin"
+        session["admin"] = True
+
+@app.before_request
+def before_every_request():
+    ensure_admin_session()
+
+# =========================
+# DB PATH OVERRIDE (LOCAL SAFE)
+# =========================
+from pathlib import Path
+
+try:
+    _BASE = Path(__file__).resolve().parent
+    _DATA = _BASE / "data" / "processed"
+    _DATA.mkdir(parents=True, exist_ok=True)
+
+    # This is the MAIN DB the portal should use (clients/policies/payments)
+    db_path = _DATA / "chi_portal.db"
+
+    # If there is any older variable name used elsewhere, sync it too
+    DB_PATH = str(db_path)
+except Exception:
+    pass
+
+# =========================
+# PORTAL DB (clients/policies/payments) - LOCAL
+# =========================
+from pathlib import Path
+_BASE = Path(__file__).resolve().parent
+_PORTAL_DB = _BASE / "data" / "processed" / "chi_portal.db"
+_PORTAL_DB.parent.mkdir(parents=True, exist_ok=True)
+db_path = _PORTAL_DB
+DB_PATH = str(_PORTAL_DB)
+
+# =========================
+# DASHBOARD SAFE MODE (NO DB TABLES YET)
+# =========================
+from sqlalchemy.exc import OperationalError
+
+_original_admin_dashboard = None
+try:
+    _original_admin_dashboard = admin_dashboard
+except Exception:
+    _original_admin_dashboard = None
+
+@app.route('/admin/dashboard-safe')
+@admin_required
+def admin_dashboard_safe():
+    try:
+        return _original_admin_dashboard()
+    except Exception as e:
+        # show empty stats rather than 500
+        stats = {
+            "total_clients": 0,
+            "total_policies": 0,
+            "total_payments": 0,
+            "error": str(e)
+        }
+        return render_template('admin/dashboard.html', stats=stats)
