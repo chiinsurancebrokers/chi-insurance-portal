@@ -1341,6 +1341,71 @@ def admin_delete_policy(policy_id):
     return redirect(url_for('admin_policies'))
 
 
+
+
+@app.route('/admin/delete-policies-range', methods=['GET', 'POST'])
+@admin_required
+def admin_delete_policies_range():
+    """Delete policies by ID range"""
+    if request.method == 'POST':
+        start_id = int(request.form.get('start_id', 0))
+        end_id = int(request.form.get('end_id', 0))
+        
+        if start_id <= 0 or end_id <= 0 or end_id < start_id:
+            flash('Invalid ID range', 'danger')
+            return redirect(url_for('admin_delete_policies_range'))
+        
+        db_session = get_session()
+        try:
+            # Delete payments first
+            deleted_payments = db_session.query(Payment).filter(
+                Payment.policy_id >= start_id,
+                Payment.policy_id <= end_id
+            ).delete(synchronize_session='fetch')
+            
+            # Delete policies
+            deleted_policies = db_session.query(Policy).filter(
+                Policy.id >= start_id,
+                Policy.id <= end_id
+            ).delete(synchronize_session='fetch')
+            
+            db_session.commit()
+            flash(f'Deleted {deleted_policies} policies and {deleted_payments} payments (IDs {start_id} to {end_id})', 'success')
+        except Exception as e:
+            db_session.rollback()
+            flash(f'Error: {str(e)}', 'danger')
+        finally:
+            db_session.close()
+        
+        return redirect(url_for('admin_policies'))
+    
+    return """
+    <html>
+    <head><title>Delete Policies</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    </head>
+    <body class="p-5">
+    <div class="container">
+        <h2>Delete Policies by ID Range</h2>
+        <p class="text-danger"><strong>Warning:</strong> This will permanently delete policies and their payments!</p>
+        <form method="POST">
+            <div class="mb-3">
+                <label>Start ID:</label>
+                <input type="number" name="start_id" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label>End ID:</label>
+                <input type="number" name="end_id" class="form-control" required>
+            </div>
+            <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure? This cannot be undone!')">Delete Range</button>
+            <a href="/admin/policies" class="btn btn-secondary">Cancel</a>
+        </form>
+    </div>
+    </body>
+    </html>
+    """
+
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
 
