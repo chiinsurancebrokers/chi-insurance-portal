@@ -5,6 +5,17 @@
     <title>Email Queue - CHI Admin</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        .status-sent { background-color: #d4edda !important; }
+        .status-queued { background-color: #fff3cd !important; }
+        .status-failed { background-color: #f8d7da !important; }
+        .table td { vertical-align: middle; }
+        .stats-card { border-radius: 10px; padding: 15px; text-align: center; margin-bottom: 20px; }
+        .stats-queued { background: #fff3cd; border: 2px solid #ffc107; }
+        .stats-sent { background: #d4edda; border: 2px solid #28a745; }
+        .stats-failed { background: #f8d7da; border: 2px solid #dc3545; }
+        .stats-number { font-size: 2em; font-weight: bold; }
+    </style>
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-danger">
@@ -19,26 +30,35 @@
     </nav>
     <div class="container mt-4">
         <h2><i class="bi bi-envelope-paper"></i> Email Queue</h2>
-        <p class="text-muted">Preview and send queued renewal emails</p>
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}{% for category, message in messages %}
         <div class="alert alert-{{ category }} alert-dismissible fade show">{{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
-        {% endfor %}{% endif %}
-        {% endwith %}
+        {% endfor %}{% endif %}{% endwith %}
+        <div class="row mb-4">
+            <div class="col-md-4"><div class="stats-card stats-queued"><div class="stats-number" id="queued-count">0</div><div>Queued</div></div></div>
+            <div class="col-md-4"><div class="stats-card stats-sent"><div class="stats-number" id="sent-count">0</div><div>Sent</div></div></div>
+            <div class="col-md-4"><div class="stats-card stats-failed"><div class="stats-number" id="failed-count">0</div><div>Failed</div></div></div>
+        </div>
         <div class="d-flex justify-content-between mb-3">
-            <form method="POST" action="/admin/email/test" style="display:inline;"><button type="submit" class="btn btn-success"><i class="bi bi-envelope-check"></i> Send Test Email</button></form>
-            <form method="POST" action="/admin/email-queue/clear" style="display:inline;" onsubmit="return confirm('Clear all queued/failed emails?')"><button type="submit" class="btn btn-danger"><i class="bi bi-trash"></i> Clear Queue</button></form>
+            <div>
+                <form method="POST" action="/admin/email/test" style="display:inline;"><button type="submit" class="btn btn-success"><i class="bi bi-envelope-check"></i> Test</button></form>
+                <button class="btn btn-outline-primary" onclick="filterEmails('all')">All</button>
+                <button class="btn btn-outline-warning" onclick="filterEmails('QUEUED')">Queued</button>
+                <button class="btn btn-outline-success" onclick="filterEmails('SENT')">Sent</button>
+            </div>
+            <form method="POST" action="/admin/email-queue/clear" style="display:inline;" onsubmit="return confirm('Clear all?')"><button type="submit" class="btn btn-danger"><i class="bi bi-trash"></i> Clear</button></form>
         </div>
         {% if emails %}
-        <table class="table table-hover">
-            <thead class="table-dark"><tr><th>Client</th><th>To</th><th>Subject</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
+        <table class="table table-hover table-bordered" id="email-table">
+            <thead class="table-dark"><tr><th>#</th><th>Client</th><th>Email</th><th>Policy</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead>
             <tbody>
             {% for email in emails %}
-            <tr>
-                <td>{{ email.client_name }}</td>
+            <tr class="email-row status-{{ email.status|lower }}" data-status="{{ email.status }}">
+                <td>{{ loop.index }}</td>
+                <td><strong>{{ email.client_name }}</strong></td>
                 <td><small>{{ email.recipient }}</small></td>
                 <td><small>{{ email.subject }}</small></td>
-                <td>{% if email.status == 'SENT' %}<span class="badge bg-success">Sent</span>{% elif email.status == 'FAILED' %}<span class="badge bg-danger">Failed</span>{% else %}<span class="badge bg-primary">Queued</span>{% endif %}</td>
+                <td>{% if email.status == 'SENT' %}<span class="badge bg-success">Sent</span>{% elif email.status == 'FAILED' %}<span class="badge bg-danger">Failed</span>{% else %}<span class="badge bg-warning text-dark">Queued</span>{% endif %}</td>
                 <td><small>{{ email.created.strftime('%d/%m %H:%M') }}</small></td>
                 <td>
                     <button type="button" class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#pm{{ email.id }}"><i class="bi bi-eye"></i></button>
@@ -46,15 +66,30 @@
                 </td>
             </tr>
             <div class="modal fade" id="pm{{ email.id }}" tabindex="-1"><div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content">
-                <div class="modal-header bg-primary text-white"><h5 class="modal-title">Email Preview</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
-                <div class="modal-body" style="max-height:70vh;overflow-y:auto;"><p><strong>To:</strong> {{ email.recipient }}</p><p><strong>Subject:</strong> {{ email.subject }}</p><hr><div class="border p-3" style="background:#f9f9f9;">{{ email.body_html|safe }}</div></div>
-                <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>{% if email.status == 'QUEUED' or email.status == 'FAILED' %}<form method="POST" action="/admin/email/send/{{ email.id }}" style="display:inline;"><button type="submit" class="btn btn-success"><i class="bi bi-send"></i> Send</button></form>{% endif %}</div>
+                <div class="modal-header bg-primary text-white"><h5 class="modal-title">{{ email.client_name }}</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body" style="max-height:70vh;overflow-y:auto;"><p><b>To:</b> {{ email.recipient }}</p><p><b>Subject:</b> {{ email.subject }}</p><hr><div class="border p-3" style="background:#f9f9f9;">{{ email.body_html|safe }}</div></div>
+                <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>{% if email.status == 'QUEUED' or email.status == 'FAILED' %}<form method="POST" action="/admin/email/send/{{ email.id }}" style="display:inline;"><button type="submit" class="btn btn-success">Send</button></form>{% endif %}</div>
             </div></div></div>
             {% endfor %}
             </tbody>
         </table>
-        {% else %}<div class="alert alert-info">No queued emails</div>{% endif %}
+        {% else %}<div class="alert alert-info">No emails</div>{% endif %}
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var rows = document.querySelectorAll('.email-row');
+            var q=0, s=0, f=0;
+            rows.forEach(function(r) { var st=r.getAttribute('data-status'); if(st==='QUEUED')q++; else if(st==='SENT')s++; else if(st==='FAILED')f++; });
+            document.getElementById('queued-count').textContent = q;
+            document.getElementById('sent-count').textContent = s;
+            document.getElementById('failed-count').textContent = f;
+        });
+        function filterEmails(status) {
+            document.querySelectorAll('.email-row').forEach(function(r) {
+                r.style.display = (status==='all' || r.getAttribute('data-status')===status) ? '' : 'none';
+            });
+        }
+    </script>
 </body>
 </html>

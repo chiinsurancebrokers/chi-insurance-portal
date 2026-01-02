@@ -677,6 +677,10 @@ def generate_renewal_email(client, policy, payment, days_until, language, agent=
     <h2 style="color: #d32f2f;">Υπενθύμιση Ανανέωσης Ασφαλιστηρίου</h2>
     <p>Αγαπητή/έ <strong>{client.name}</strong>,</p>
     <p>Σας ενημερώνουμε ότι το ασφαλιστήριό σας πλησιάζει στην ημερομηνία πληρωμής.</p>
+    <div style="background: #d4edda; padding: 15px; border-left: 4px solid #28a745; margin: 20px 0;">
+        <strong><i>Αν η πληρωμή γίνεται μέσω πάγιας εντολής, δεν χρειάζεται να κάνετε καμία ενέργεια.</i></strong><br>
+        <strong><i>Αν έχετε ήδη πληρώσει, παρακαλούμε αγνοήστε το παρόν μήνυμα.</i></strong>
+    </div>
     <div style="background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 20px 0;">
         <strong>Υπολείπονται {days_until} {'ημέρα' if days_until == 1 else 'ημέρες'} μέχρι την πληρωμή</strong>
     </div>
