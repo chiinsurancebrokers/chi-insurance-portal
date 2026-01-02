@@ -868,7 +868,14 @@ def parse_csv_changes(filepath):
         # Detect Production Report format (Greek insurance system)
         is_production = 'Πελάτης' in first_line or 'Χαρακτ/κό' in first_line
         
+        print(f'DEBUG: is_production={is_production}, is_3p={is_3p}')
+        print(f'DEBUG: first_line={first_line[:100]}')
+        
+        row_count = 0
         for row in reader:
+            row_count += 1
+            if row_count <= 2:
+                print(f'DEBUG row {row_count}: {dict(row)}')
             if is_production:
                 # Production Report format: Χαρακτ/κό;Πελάτης;Συμβόλαιο;...;Κλάδος;Εταιρεία;...;Λήξη;Μικτά
                 client_name = row.get('Πελάτης', '').strip()
