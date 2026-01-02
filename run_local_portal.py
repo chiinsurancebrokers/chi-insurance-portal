@@ -831,9 +831,9 @@ def admin_csv_commit():
     
     return redirect(url_for('admin_csv_upload'))
 
+
 def parse_csv_changes(filepath):
-    """Parse CSV and detect changes"""
-    import csv
+    """Parse CSV file - Production Report format from Greek insurance system"""
     from datetime import datetime
     
     db_session = get_session()
@@ -841,24 +841,33 @@ def parse_csv_changes(filepath):
     # Try multiple encodings for Greek files
     encodings = ['utf-8-sig', 'utf-8', 'windows-1253', 'iso-8859-7', 'cp1253', 'latin1']
     file_content = None
-    used_encoding = 'utf-8-sig'
+    
     for enc in encodings:
         try:
             with open(filepath, 'r', encoding=enc) as f:
                 file_content = f.read()
-            used_encoding = enc
             break
         except UnicodeDecodeError:
             continue
+    
     if file_content is None:
         raise Exception('Could not decode file')
-    # Get header line (skip title row if present)
-    lines = file_content.split(chr(10))
-    first_line = lines[0]
-    # Check if first line is title row
-    if 'Παραγωγή' in first_line and 'Πελάτης' not in first_line:
-        first_line = lines[1] if len(lines) > 1 else first_line
-    is_3p = 'INSURANCE COMPANY' in first_line.upper()
+    
+    lines = [l for l in file_content.split('\n') if l.strip()]
+    
+    # Find header row (skip title rows like "Παραγωγή;;;;;;")
+    header_idx = 0
+    for i, line in enumerate(lines):
+        if 'Πελάτης' in line and 'Κλάδος' in line:
+            header_idx = i
+            break
+    
+    header_line = lines[header_idx]
+    delimiter = ';'
+    headers = [h.strip().strip('"') for h in header_line.split(delimiter)]
+    
+    print(f'DEBUG: Header found at line {header_idx + 1}')
+    print(f'DEBUG: Headers: {headers[:8]}')
     
     changes = {
         'new_policies': [],
@@ -867,138 +876,140 @@ def parse_csv_changes(filepath):
         'new_clients': []
     }
     
-    with open(filepath, 'r', encoding=used_encoding) as f:
-        reader = csv.DictReader(f, delimiter=';' if ';' in first_line else ',')
+    # Parse data rows
+    for line_num, line in enumerate(lines[header_idx + 1:], start=1):
+        if not line.strip() or line.startswith(';;;'):
+            continue
         
-        # Detect Production Report format (Greek insurance system)
-        is_production = 'Πελάτης' in first_line or 'Χαρακτ/κό' in first_line
-        
-        print(f'DEBUG: is_production={is_production}, is_3p={is_3p}')
-        print(f'DEBUG: first_line={first_line[:100]}')
-        
-        row_count = 0
-        for row in reader:
-            row_count += 1
-            if row_count <= 2:
-                print(f'DEBUG row {row_count}: {dict(row)}')
-            if is_production:
-                # Production Report format: Χαρακτ/κό;Πελάτης;Συμβόλαιο;...;Κλάδος;Εταιρεία;...;Λήξη;Μικτά
-                client_name = row.get('Πελάτης', '').strip()
-                policy_type_raw = row.get('Κλάδος', '').strip()
-                provider = row.get('Εταιρεία', '').strip()
-                license_plate = row.get('Χαρακτ/κό', '').strip() or None
-                premium_str = row.get('Μικτά', '0').replace('.', '').replace(',', '.')
-                expiry_str = row.get('Λήξη', '')
-                
-                # Skip invalid license plates
-                if license_plate and (len(license_plate) > 15 or license_plate.startswith('ΜΕΤΑΦΟΡΑ')):
-                    license_plate = None
-                
-                # Map Greek insurance types
-                type_map = {'ΖΩΗΣ': 'Life Insurance', 'ΥΓΕΙΑΣ': 'Health Insurance', 'AYTOKINHTO': 'ΑΥΤΟΚΙΝΗΤΟ', 'ΠΥΡΟΣ': 'Property Insurance', 'ΠΥΡΟΣ-ΠΕΡΙΟΥΣΙΑΣ': 'Property Insurance'}
-                policy_type = type_map.get(policy_type_raw, policy_type_raw)
-                
-                # Parse date format: 2026-01-25 00:00:00
-                if expiry_str and '-' in expiry_str:
-                    try:
-                        expiry_str = expiry_str.split()[0]  # Get date part only
-                        from datetime import datetime as dt
-                        expiry_date = dt.strptime(expiry_str, '%Y-%m-%d').date()
-                        expiry_str = None  # Mark as already parsed
-                    except:
-                        pass
-            elif is_3p:
-                client_name = row.get('CLIENT NAME', '').strip()
-                policy_type = row.get('INSURANCE TYPE', '').strip()
-                provider = row.get('INSURANCE COMPANY', '').strip()
-                license_plate = row.get('LICENSE PLATE', '').strip() or None
-                premium_str = row.get('PREMIUM AMOUNT', '0').replace(',', '.')
-                expiry_str = row.get('EXPIRY DATE', '')
+        # Parse CSV row (handle quoted fields)
+        values = []
+        current = ''
+        in_quotes = False
+        for char in line:
+            if char == '"':
+                in_quotes = not in_quotes
+            elif char == delimiter and not in_quotes:
+                values.append(current.strip().strip('"'))
+                current = ''
             else:
-                # Hellas Direct format
-                client_name = row.get('Ονοματεπώνυμο', '').strip()
-                policy_type = 'ΑΥΤΟΚΙΝΗΤΟ'
-                provider = 'HELLAS DIRECT'
-                license_plate = row.get('Αρ. Κυκλοφορίας', '').strip() or None
-                premium_str = row.get('Ασφάλιστρο', '0').replace(',', '.')
-                expiry_str = row.get('Λήξη', '')
-            
-            if not client_name:
-                continue
-            
-            # Parse data
+                current += char
+        values.append(current.strip().strip('"'))
+        
+        # Create row dict
+        row = {}
+        for i, h in enumerate(headers):
+            row[h] = values[i] if i < len(values) else ''
+        
+        # Extract data from Production Report format
+        client_name = row.get('Πελάτης', '').strip()
+        policy_type_raw = row.get('Κλάδος', '').strip()
+        provider = row.get('Εταιρεία', '').strip()
+        license_plate = row.get('Χαρακτ/κό', '').strip() or None
+        premium_str = row.get('Μικτά', '0')
+        expiry_str = row.get('Λήξη', '')
+        
+        if not client_name:
+            continue
+        
+        # Clean license plate (skip invalid ones)
+        if license_plate and (len(license_plate) > 12 or 'ΜΕΤΑΦΟΡΑ' in license_plate or 'ΠΑΡΑΣΚΕΥΗ' in license_plate):
+            license_plate = None
+        
+        # Map Greek policy types to English
+        type_map = {
+            'ΖΩΗΣ': 'Life Insurance',
+            'ΥΓΕΙΑΣ': 'Health Insurance', 
+            'AYTOKINHTO': 'ΑΥΤΟΚΙΝΗΤΟ',
+            'ΠΥΡΟΣ': 'Property Insurance',
+            'ΠΥΡΟΣ-ΠΕΡΙΟΥΣΙΑΣ': 'Property Insurance'
+        }
+        policy_type = type_map.get(policy_type_raw, policy_type_raw)
+        
+        # Parse premium (Greek format: 1.234,56 -> 1234.56)
+        try:
+            premium_str = premium_str.replace('.', '').replace(',', '.')
+            premium = float(premium_str)
+        except:
+            premium = 0.0
+        
+        # Parse expiry date
+        expiry_date = None
+        if expiry_str:
             try:
-                premium = float(premium_str)
+                if '-' in expiry_str:
+                    expiry_date = datetime.strptime(expiry_str.split()[0], '%Y-%m-%d').date()
+                elif '/' in expiry_str:
+                    expiry_date = datetime.strptime(expiry_str, '%d/%m/%Y').date()
             except:
-                premium = 0.0
-            
-            # Parse expiry date
-            expiry_date = None
-            try:
-                if expiry_str:
-                    if '-' in expiry_str:
-                        expiry_date = datetime.strptime(expiry_str.split()[0], '%Y-%m-%d').date()
-                    elif '/' in expiry_str:
-                        expiry_date = datetime.strptime(expiry_str, '%d/%m/%Y').date()
-            except:
-                expiry_date = None
-            
-            # Check if client exists
-            client = db_session.query(Client).filter_by(name=client_name).first()
-            
-            if not client:
-                changes['new_clients'].append({
-                    'name': client_name,
-                    'policy_type': policy_type,
-                    'provider': provider,
-                    'license_plate': license_plate,
-                    'premium': premium,
-                    'expiry_date': expiry_date
-                })
-                continue
-            
-            # Check if policy exists
-            if license_plate:
-                existing = db_session.query(Policy).filter_by(
-                    client_id=client.id,
-                    license_plate=license_plate
-                ).first()
-            else:
-                existing = db_session.query(Policy).filter_by(
-                    client_id=client.id,
-                    policy_type=policy_type,
-                    provider=provider
-                ).first()
-            
-            if not existing:
-                changes['new_policies'].append({
-                    'client_name': client_name,
-                    'client_id': client.id,
-                    'policy_type': policy_type,
-                    'provider': provider,
-                    'license_plate': license_plate,
-                    'premium': premium,
-                    'expiry_date': expiry_date
-                })
-            elif existing.premium != premium or existing.expiration_date != expiry_date:
-                changes['updated_policies'].append({
-                    'client_name': client_name,
-                    'policy_id': existing.id,
-                    'policy_type': policy_type,
-                    'license_plate': license_plate,
-                    'old_premium': existing.premium,
-                    'new_premium': premium,
-                    'old_expiry': existing.expiration_date,
-                    'new_expiry': expiry_date
-                })
-            else:
-                changes['unchanged'].append({
-                    'client_name': client_name,
-                    'policy_type': policy_type
-                })
+                pass
+        
+        # Debug first 3 rows
+        if line_num <= 3:
+            print(f'DEBUG row {line_num}: {client_name} | {policy_type} | {provider} | {premium} | {expiry_date}')
+        
+        # Check if client exists in database
+        client = db_session.query(Client).filter_by(name=client_name).first()
+        
+        if not client:
+            changes['new_clients'].append({
+                'name': client_name,
+                'policy_type': policy_type,
+                'provider': provider,
+                'license_plate': license_plate,
+                'premium': premium,
+                'expiry_date': expiry_date
+            })
+            continue
+        
+        # Check if policy exists for this client
+        if license_plate:
+            existing = db_session.query(Policy).filter_by(
+                client_id=client.id,
+                license_plate=license_plate
+            ).first()
+        else:
+            existing = db_session.query(Policy).filter_by(
+                client_id=client.id,
+                policy_type=policy_type,
+                provider=provider
+            ).first()
+        
+        if not existing:
+            # New policy for existing client
+            changes['new_policies'].append({
+                'client_name': client_name,
+                'client_id': client.id,
+                'policy_type': policy_type,
+                'provider': provider,
+                'license_plate': license_plate,
+                'premium': premium,
+                'expiry_date': expiry_date
+            })
+        elif existing.premium != premium or existing.expiration_date != expiry_date:
+            # Policy exists but needs update
+            changes['updated_policies'].append({
+                'client_name': client_name,
+                'policy_id': existing.id,
+                'policy_type': policy_type,
+                'license_plate': license_plate,
+                'old_premium': existing.premium,
+                'new_premium': premium,
+                'old_expiry': existing.expiration_date,
+                'new_expiry': expiry_date
+            })
+        else:
+            # Policy unchanged
+            changes['unchanged'].append({
+                'client_name': client_name,
+                'policy_type': policy_type
+            })
+    
+    print(f'DEBUG RESULTS: new_clients={len(changes["new_clients"])}, new_policies={len(changes["new_policies"])}, updated={len(changes["updated_policies"])}, unchanged={len(changes["unchanged"])}')
     
     db_session.close()
     return changes
+
+
 
 def commit_csv_changes(changes):
     """Commit parsed changes to database"""
