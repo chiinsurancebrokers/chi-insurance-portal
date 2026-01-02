@@ -1523,6 +1523,62 @@ def admin_delete_old_policies():
     """
 
 
+
+
+@app.route('/admin/clear-all-data', methods=['GET', 'POST'])
+@admin_required
+def admin_clear_all_data():
+    """Clear all policies, payments, and email queue - START FRESH"""
+    
+    if request.method == 'POST':
+        confirm = request.form.get('confirm', '')
+        if confirm != 'DELETE ALL':
+            flash('You must type DELETE ALL to confirm', 'danger')
+            return redirect(url_for('admin_clear_all_data'))
+        
+        db_session = get_session()
+        try:
+            # Delete in correct order (respect foreign keys)
+            deleted_emails = db_session.query(EmailQueue).delete()
+            deleted_payments = db_session.query(Payment).delete()
+            deleted_policies = db_session.query(Policy).delete()
+            
+            db_session.commit()
+            flash(f'Cleared: {deleted_emails} emails, {deleted_payments} payments, {deleted_policies} policies', 'success')
+        except Exception as e:
+            db_session.rollback()
+            flash(f'Error: {str(e)}', 'danger')
+        finally:
+            db_session.close()
+        
+        return redirect(url_for('admin_policies'))
+    
+    return """
+    <html>
+    <head><title>Clear All Data</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    </head>
+    <body class="p-5">
+    <div class="container">
+        <h2 class="text-danger">Clear All Data</h2>
+        <div class="alert alert-danger">
+            <strong>WARNING:</strong> This will delete ALL policies, payments, and queued emails!<br>
+            Clients will NOT be deleted - only their policies.
+        </div>
+        <form method="POST">
+            <div class="mb-3">
+                <label>Type <strong>DELETE ALL</strong> to confirm:</label>
+                <input type="text" name="confirm" class="form-control" placeholder="DELETE ALL" required>
+            </div>
+            <button type="submit" class="btn btn-danger">Clear Everything</button>
+            <a href="/admin/policies" class="btn btn-secondary">Cancel</a>
+        </form>
+    </div>
+    </body>
+    </html>
+    """
+
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
 
