@@ -832,44 +832,28 @@ def admin_csv_commit():
     return redirect(url_for('admin_csv_upload'))
 
 def parse_csv_changes(filepath):
-    """Parse CSV file with multi-encoding support for Greek files"""
+    """Parse CSV and detect changes"""
     import csv
     from datetime import datetime
     
     db_session = get_session()
     
     # Try multiple encodings for Greek files
-    encodings = ['utf-8-sig', 'utf-8', 'windows-1253', 'iso-8859-7', 'cp1253', 'cp1252', 'latin1']
+    encodings = ['utf-8-sig', 'utf-8', 'windows-1253', 'iso-8859-7', 'cp1253', 'latin1']
     file_content = None
-    
+    used_encoding = 'utf-8-sig'
     for enc in encodings:
         try:
             with open(filepath, 'r', encoding=enc) as f:
                 file_content = f.read()
+            used_encoding = enc
             break
         except UnicodeDecodeError:
             continue
-    
     if file_content is None:
-        raise Exception("Could not decode file with any known encoding")
-    
-    lines = file_content.strip().split('\n')
-    
-    # Find header row
-    header_idx = 0
-    for i, line in enumerate(lines):
-        if 'Πελάτης' in line or 'CLIENT' in line.upper() or 'INSURANCE COMPANY' in line.upper() or 'Ονοματεπώνυμο' in line:
-            header_idx = i
-            break
-    
-    header_line = lines[header_idx]
-    delimiter = ';' if ';' in header_line else ','
-    header = [h.strip().strip('"') for h in header_line.split(delimiter)]
-    
-    # Detect format
-    is_production_report = 'Χαρακτ/κό' in header or 'Πελάτης' in header
-    is_3p_format = 'INSURANCE COMPANY' in [h.upper() for h in header]
-    is_hellas_direct = 'Ονοματεπώνυμο' in header
+        raise Exception('Could not decode file')
+    first_line = file_content.split(chr(10))[0]
+    is_3p = 'INSURANCE COMPANY' in first_line.upper()
     
     changes = {
         'new_policies': [],
@@ -878,207 +862,93 @@ def parse_csv_changes(filepath):
         'new_clients': []
     }
     
-    for line in lines[header_idx + 1:]:
-        if not line.strip() or line.strip().startswith(';;;'):
-            continue
+    with open(filepath, 'r', encoding=used_encoding) as f:
+        reader = csv.DictReader(f, delimiter=';' if ';' in first_line else ',')
         
-        # Parse row handling quoted fields
-        values = []
-        in_quotes = False
-        current = ''
-        for char in line:
-            if char == '"':
-                in_quotes = not in_quotes
-            elif char == delimiter and not in_quotes:
-                values.append(current.strip().strip('"'))
-                current = ''
+        for row in reader:
+            if is_3p:
+                client_name = row.get('CLIENT NAME', '').strip()
+                policy_type = row.get('INSURANCE TYPE', '').strip()
+                provider = row.get('INSURANCE COMPANY', '').strip()
+                license_plate = row.get('LICENSE PLATE', '').strip() or None
+                premium_str = row.get('PREMIUM AMOUNT', '0').replace(',', '.')
+                expiry_str = row.get('EXPIRY DATE', '')
             else:
-                current += char
-        values.append(current.strip().strip('"'))
-        
-        if len(values) < 6:
-            continue
-        
-        # Production Report format (Greek insurance system)
-        if is_production_report:
-            try:
-                license_plate = values[0] if values[0] and len(values[0]) < 15 and not values[0].startswith('ΜΕΤΑΦΟΡΑ') else None
-                client_name = values[1] if len(values) > 1 else ''
-                policy_type = values[5] if len(values) > 5 else ''
-                provider = values[6] if len(values) > 6 else ''
-                expiry_str = values[9] if len(values) > 9 else ''
-                premium_str = values[10] if len(values) > 10 else '0'
-                
-                if not client_name.strip():
-                    continue
-                
-                # Map Greek insurance types
-                type_map = {'ΖΩΗΣ': 'LIFE', 'ΥΓΕΙΑΣ': 'HEALTH', 'AYTOKINHTO': 'ΑΥΤΟΚΙΝΗΤΟ', 'ΠΥΡΟΣ': 'PROPERTY', 'ΠΥΡΟΣ-ΠΕΡΙΟΥΣΙΑΣ': 'PROPERTY'}
-                policy_type = type_map.get(policy_type, policy_type)
-                
-            except:
+                # Hellas Direct format
+                client_name = row.get('Ονοματεπώνυμο', '').strip()
+                policy_type = 'ΑΥΤΟΚΙΝΗΤΟ'
+                provider = 'HELLAS DIRECT'
+                license_plate = row.get('Αρ. Κυκλοφορίας', '').strip() or None
+                premium_str = row.get('Ασφάλιστρο', '0').replace(',', '.')
+                expiry_str = row.get('Λήξη', '')
+            
+            if not client_name:
                 continue
-        elif is_3p_format:
-            client_name = values[0] if len(values) > 0 else ''
-            policy_type = values[1] if len(values) > 1 else ''
-            provider = values[2] if len(values) > 2 else ''
-            license_plate = values[3] if len(values) > 3 and values[3] else None
-            premium_str = values[4] if len(values) > 4 else '0'
-            expiry_str = values[5] if len(values) > 5 else ''
-        else:
-            # Hellas Direct format
-            client_name = values[0] if len(values) > 0 else ''
-            policy_type = 'ΑΥΤΟΚΙΝΗΤΟ'
-            provider = 'HELLAS DIRECT'
-            license_plate = values[1] if len(values) > 1 else None
-            premium_str = values[2] if len(values) > 2 else '0'
-            expiry_str = values[3] if len(values) > 3 else ''
-        
-        if not client_name.strip():
-            continue
-        
-        # Parse premium (handle Greek format: 286,22)
-        try:
-            premium_str = premium_str.replace('.', '').replace(',', '.')
-            premium = float(premium_str)
-        except:
-            premium = 0.0
-        
-        # Parse expiry date
-        expiry_date = None
-        if expiry_str:
+            
+            # Parse data
             try:
-                if '-' in expiry_str:
-                    expiry_date = datetime.strptime(expiry_str.split()[0], '%Y-%m-%d').date()
-                elif '/' in expiry_str:
-                    expiry_date = datetime.strptime(expiry_str, '%d/%m/%Y').date()
+                premium = float(premium_str)
             except:
-                pass
-        
-        # Check if client exists
-        client = db_session.query(Client).filter_by(name=client_name.strip()).first()
-        
-        if not client:
-            changes['new_clients'].append({
-                'name': client_name.strip(),
-                'policy_type': policy_type,
-                'provider': provider,
-                'license_plate': license_plate,
-                'premium': premium,
-                'expiry_date': expiry_date
-            })
-            continue
-        
-        # Check if policy exists
-        if license_plate:
-            existing = db_session.query(Policy).filter_by(
-                client_id=client.id,
-                license_plate=license_plate
-            ).first()
-        else:
-            existing = db_session.query(Policy).filter_by(
-                client_id=client.id,
-                policy_type=policy_type,
-                provider=provider
-            ).first()
-        
-        if not existing:
-            changes['new_policies'].append({
-                'client_name': client_name.strip(),
-                'client_id': client.id,
-                'policy_type': policy_type,
-                'provider': provider,
-                'license_plate': license_plate,
-                'premium': premium,
-                'expiry_date': expiry_date
-            })
-        elif existing.premium != premium or existing.expiration_date != expiry_date:
-            changes['updated_policies'].append({
-                'client_name': client_name.strip(),
-                'policy_id': existing.id,
-                'policy_type': policy_type,
-                'license_plate': license_plate,
-                'old_premium': existing.premium,
-                'new_premium': premium,
-                'old_expiry': existing.expiration_date,
-                'new_expiry': expiry_date
-            })
-        else:
-            changes['unchanged'].append({
-                'client_name': client_name.strip(),
-                'policy_type': policy_type
-            })
-    
-    db_session.close()
-    return changes
-
-        except:
-            premium = 0.0
-        
-        # Parse expiry date
-        expiry_date = None
-        if expiry_str:
+                premium = 0.0
+            
             try:
-                if '-' in expiry_str:
-                    expiry_date = datetime.strptime(expiry_str.split()[0], '%Y-%m-%d').date()
-                elif '/' in expiry_str:
-                    expiry_date = datetime.strptime(expiry_str, '%d/%m/%Y').date()
+                expiry_date = datetime.strptime(expiry_str, '%d/%m/%Y').date()
             except:
-                pass
-        
-        # Check if client exists
-        client = db_session.query(Client).filter_by(name=client_name.strip()).first()
-        
-        if not client:
-            changes['new_clients'].append({
-                'name': client_name.strip(),
-                'policy_type': policy_type,
-                'provider': provider,
-                'license_plate': license_plate,
-                'premium': premium,
-                'expiry_date': expiry_date
-            })
-            continue
-        
-        # Check if policy exists
-        if license_plate:
-            existing = db_session.query(Policy).filter_by(
-                client_id=client.id,
-                license_plate=license_plate
-            ).first()
-        else:
-            existing = db_session.query(Policy).filter_by(
-                client_id=client.id,
-                policy_type=policy_type,
-                provider=provider
-            ).first()
-        
-        if not existing:
-            changes['new_policies'].append({
-                'client_name': client_name.strip(),
-                'client_id': client.id,
-                'policy_type': policy_type,
-                'provider': provider,
-                'license_plate': license_plate,
-                'premium': premium,
-                'expiry_date': expiry_date
-            })
-        elif existing.premium != premium or existing.expiration_date != expiry_date:
-            changes['updated_policies'].append({
-                'client_name': client_name.strip(),
-                'policy_id': existing.id,
-                'policy_type': policy_type,
-                'license_plate': license_plate,
-                'old_premium': existing.premium,
-                'new_premium': premium,
-                'old_expiry': existing.expiration_date,
-                'new_expiry': expiry_date
-            })
-        else:
-            changes['unchanged'].append({
-                'client_name': client_name.strip(),
-                'policy_type': policy_type
-            })
+                expiry_date = None
+            
+            # Check if client exists
+            client = db_session.query(Client).filter_by(name=client_name).first()
+            
+            if not client:
+                changes['new_clients'].append({
+                    'name': client_name,
+                    'policy_type': policy_type,
+                    'provider': provider,
+                    'license_plate': license_plate,
+                    'premium': premium,
+                    'expiry_date': expiry_date
+                })
+                continue
+            
+            # Check if policy exists
+            if license_plate:
+                existing = db_session.query(Policy).filter_by(
+                    client_id=client.id,
+                    license_plate=license_plate
+                ).first()
+            else:
+                existing = db_session.query(Policy).filter_by(
+                    client_id=client.id,
+                    policy_type=policy_type,
+                    provider=provider
+                ).first()
+            
+            if not existing:
+                changes['new_policies'].append({
+                    'client_name': client_name,
+                    'client_id': client.id,
+                    'policy_type': policy_type,
+                    'provider': provider,
+                    'license_plate': license_plate,
+                    'premium': premium,
+                    'expiry_date': expiry_date
+                })
+            elif existing.premium != premium or existing.expiration_date != expiry_date:
+                changes['updated_policies'].append({
+                    'client_name': client_name,
+                    'policy_id': existing.id,
+                    'policy_type': policy_type,
+                    'license_plate': license_plate,
+                    'old_premium': existing.premium,
+                    'new_premium': premium,
+                    'old_expiry': existing.expiration_date,
+                    'new_expiry': expiry_date
+                })
+            else:
+                changes['unchanged'].append({
+                    'client_name': client_name,
+                    'policy_type': policy_type
+                })
     
     db_session.close()
     return changes
