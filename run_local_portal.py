@@ -865,8 +865,37 @@ def parse_csv_changes(filepath):
     with open(filepath, 'r', encoding=used_encoding) as f:
         reader = csv.DictReader(f, delimiter=';' if ';' in first_line else ',')
         
+        # Detect Production Report format (Greek insurance system)
+        is_production = 'Πελάτης' in first_line or 'Χαρακτ/κό' in first_line
+        
         for row in reader:
-            if is_3p:
+            if is_production:
+                # Production Report format: Χαρακτ/κό;Πελάτης;Συμβόλαιο;...;Κλάδος;Εταιρεία;...;Λήξη;Μικτά
+                client_name = row.get('Πελάτης', '').strip()
+                policy_type_raw = row.get('Κλάδος', '').strip()
+                provider = row.get('Εταιρεία', '').strip()
+                license_plate = row.get('Χαρακτ/κό', '').strip() or None
+                premium_str = row.get('Μικτά', '0').replace('.', '').replace(',', '.')
+                expiry_str = row.get('Λήξη', '')
+                
+                # Skip invalid license plates
+                if license_plate and (len(license_plate) > 15 or license_plate.startswith('ΜΕΤΑΦΟΡΑ')):
+                    license_plate = None
+                
+                # Map Greek insurance types
+                type_map = {'ΖΩΗΣ': 'Life Insurance', 'ΥΓΕΙΑΣ': 'Health Insurance', 'AYTOKINHTO': 'ΑΥΤΟΚΙΝΗΤΟ', 'ΠΥΡΟΣ': 'Property Insurance', 'ΠΥΡΟΣ-ΠΕΡΙΟΥΣΙΑΣ': 'Property Insurance'}
+                policy_type = type_map.get(policy_type_raw, policy_type_raw)
+                
+                # Parse date format: 2026-01-25 00:00:00
+                if expiry_str and '-' in expiry_str:
+                    try:
+                        expiry_str = expiry_str.split()[0]  # Get date part only
+                        from datetime import datetime as dt
+                        expiry_date = dt.strptime(expiry_str, '%Y-%m-%d').date()
+                        expiry_str = None  # Mark as already parsed
+                    except:
+                        pass
+            elif is_3p:
                 client_name = row.get('CLIENT NAME', '').strip()
                 policy_type = row.get('INSURANCE TYPE', '').strip()
                 provider = row.get('INSURANCE COMPANY', '').strip()
@@ -892,9 +921,14 @@ def parse_csv_changes(filepath):
                 premium = 0.0
             
             try:
-                expiry_date = datetime.strptime(expiry_str, '%d/%m/%Y').date()
+                if expiry_str:  # Only parse if not already parsed
+                    if '-' in expiry_str:
+                        expiry_date = datetime.strptime(expiry_str.split()[0], '%Y-%m-%d').date()
+                    else:
+                        expiry_date = datetime.strptime(expiry_str, '%d/%m/%Y').date()
             except:
-                expiry_date = None
+                if 'expiry_date' not in dir():
+                    expiry_date = None
             
             # Check if client exists
             client = db_session.query(Client).filter_by(name=client_name).first()
