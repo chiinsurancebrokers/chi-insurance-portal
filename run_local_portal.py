@@ -1406,6 +1406,104 @@ def admin_delete_policies_range():
     """
 
 
+
+
+@app.route('/admin/delete-old-policies', methods=['GET', 'POST'])
+@admin_required
+def admin_delete_old_policies():
+    """Delete policies expiring before a certain date"""
+    from datetime import date
+    
+    db_session = get_session()
+    
+    if request.method == 'POST':
+        year = int(request.form.get('year', 2025))
+        cutoff_date = date(year, 1, 1)
+        
+        try:
+            # Find policies to delete
+            old_policies = db_session.query(Policy).filter(
+                Policy.expiration_date < cutoff_date
+            ).all()
+            
+            policy_ids = [p.id for p in old_policies]
+            
+            if policy_ids:
+                # Delete payments first
+                deleted_payments = db_session.query(Payment).filter(
+                    Payment.policy_id.in_(policy_ids)
+                ).delete(synchronize_session='fetch')
+                
+                # Delete policies
+                deleted_policies = db_session.query(Policy).filter(
+                    Policy.id.in_(policy_ids)
+                ).delete(synchronize_session='fetch')
+                
+                db_session.commit()
+                flash(f'Deleted {deleted_policies} policies and {deleted_payments} payments (expiring before {year})', 'success')
+            else:
+                flash('No policies found before that date', 'info')
+        except Exception as e:
+            db_session.rollback()
+            flash(f'Error: {str(e)}', 'danger')
+        finally:
+            db_session.close()
+        
+        return redirect(url_for('admin_policies'))
+    
+    # Show preview of what will be deleted
+    try:
+        cutoff = date(2025, 1, 1)
+        old_policies = db_session.query(Policy).filter(
+            Policy.expiration_date < cutoff
+        ).order_by(Policy.expiration_date).all()
+        
+        preview = []
+        for p in old_policies:
+            preview.append({
+                'id': p.id,
+                'client': p.client.name if p.client else 'Unknown',
+                'type': p.policy_type,
+                'expires': p.expiration_date.strftime('%d/%m/%Y') if p.expiration_date else '-'
+            })
+    finally:
+        db_session.close()
+    
+    return f"""
+    <html>
+    <head><title>Delete Old Policies</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    </head>
+    <body class="p-4">
+    <div class="container">
+        <h2>Delete Old Policies</h2>
+        <p class="text-danger"><strong>Warning:</strong> This will permanently delete policies and their payments!</p>
+        <form method="POST" class="mb-4">
+            <div class="row">
+                <div class="col-md-4">
+                    <label>Delete policies expiring before year:</label>
+                    <input type="number" name="year" class="form-control" value="2025" min="2020" max="2026">
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button type="submit" class="btn btn-danger" onclick="return confirm('Delete {len(preview)} policies expiring before 2025?')">Delete Old Policies</button>
+                    <a href="/admin/policies" class="btn btn-secondary ms-2">Cancel</a>
+                </div>
+            </div>
+        </form>
+        <h4>Preview: {len(preview)} policies expiring before 01/01/2025</h4>
+        <table class="table table-sm">
+            <thead class="table-dark"><tr><th>ID</th><th>Client</th><th>Type</th><th>Expires</th></tr></thead>
+            <tbody>
+            {''.join(f"<tr><td>{p['id']}</td><td>{p['client']}</td><td>{p['type']}</td><td>{p['expires']}</td></tr>" for p in preview[:50])}
+            {'<tr><td colspan="4">... and more</td></tr>' if len(preview) > 50 else ''}
+            </tbody>
+        </table>
+    </div>
+    </body>
+    </html>
+    """
+
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
 
