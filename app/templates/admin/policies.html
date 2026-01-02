@@ -5,104 +5,85 @@
     <title>Policies - CHI Admin</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        .table th { font-size: 0.85em; }
+        .table td { font-size: 0.9em; vertical-align: middle; }
+        .policy-number { font-family: monospace; font-size: 0.85em; color: #666; }
+    </style>
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-danger">
-        <div class="container">
+        <div class="container-fluid">
             <a class="navbar-brand" href="/admin/dashboard"><i class="bi bi-shield-lock-fill"></i> CHI Admin</a>
             <div class="ms-auto">
+                <a href="/admin/renewals" class="btn btn-warning btn-sm me-2">Renewals</a>
                 <a href="/admin/dashboard" class="btn btn-light btn-sm me-2">Dashboard</a>
                 <a href="/logout" class="btn btn-light btn-sm">Logout</a>
             </div>
         </div>
     </nav>
-    
-    <div class="container mt-4">
+    <div class="container-fluid mt-4">
         <h2><i class="bi bi-file-earmark-text"></i> All Policies</h2>
-        
         {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                <div class="alert alert-{{ category }} alert-dismissible fade show">
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-        
+        {% if messages %}{% for category, message in messages %}
+        <div class="alert alert-{{ category }} alert-dismissible fade show">{{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+        {% endfor %}{% endif %}{% endwith %}
         <div class="row mb-3">
             <div class="col-md-6">
                 <form method="GET" class="input-group">
                     <input type="text" name="search" class="form-control" placeholder="Search by client name..." value="{{ search }}">
-                    <button class="btn btn-primary" type="submit">
-                        <i class="bi bi-search"></i> Search
-                    </button>
-                    {% if search %}
-                    <a href="/admin/policies" class="btn btn-secondary">Clear</a>
-                    {% endif %}
+                    <button class="btn btn-primary" type="submit"><i class="bi bi-search"></i> Search</button>
+                    {% if search %}<a href="/admin/policies" class="btn btn-secondary">Clear</a>{% endif %}
                 </form>
             </div>
+            <div class="col-md-6 text-end">
+                <span class="text-muted">Total: {{ policies|length }} policies</span>
+            </div>
         </div>
-        
         {% if policies %}
         <div class="table-responsive">
-            <table class="table table-hover">
+            <table class="table table-hover table-bordered table-sm">
                 <thead class="table-dark">
                     <tr>
+                        <th>Policy #</th>
                         <th>Client</th>
                         <th>Type</th>
                         <th>Provider</th>
                         <th>License Plate</th>
                         <th>Premium</th>
+                        <th>Start Date</th>
                         <th>Expires</th>
                         <th>Status</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for policy in policies %}
-                    <tr>
-                        <td>{{ policy.client_name }}</td>
-                        <td>{{ policy.policy_type }}</td>
-                        <td>{{ policy.provider }}</td>
-                        <td>{{ policy.license_plate or '-' }}</td>
-                        <td>€{{ "%.2f"|format(policy.premium) if policy.premium else '-' }}</td>
-                        <td>{{ policy.expiration_date.strftime('%d/%m/%Y') if policy.expiration_date else '-' }}</td>
-                        <td>
-                            {% if policy.status == 'ACTIVE' %}
-                            <span class="badge bg-success">Active</span>
-                            {% else %}
-                            <span class="badge bg-secondary">{{ policy.status }}</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <a href="/admin/policy/{{ policy.id }}/edit" class="btn btn-sm btn-primary">
-                                <i class="bi bi-pencil"></i> Edit
-                            </a>
-                            <form method="POST" action="/admin/policy/{{ policy.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete this policy and all associated payments?')">
-                                <button type="submit" class="btn btn-sm btn-danger">
-                                    <i class="bi bi-trash"></i> Delete
-                                </button>
-                            </form>
-                        </td>
-                    </tr>
-                    {% endfor %}
+                {% for policy in policies %}
+                <tr>
+                    <td><span class="policy-number">{{ policy.policy_number or '-' }}</span></td>
+                    <td><strong>{{ policy.client_name }}</strong></td>
+                    <td>{{ policy.policy_type }}</td>
+                    <td><small>{{ policy.provider }}</small></td>
+                    <td>{{ policy.license_plate or '-' }}</td>
+                    <td>EUR{{ "%.2f"|format(policy.premium) if policy.premium else '-' }}</td>
+                    <td>{{ policy.start_date.strftime('%d/%m/%Y') if policy.start_date else '-' }}</td>
+                    <td>{{ policy.expiration_date.strftime('%d/%m/%Y') if policy.expiration_date else '-' }}</td>
+                    <td>{% if policy.status == 'ACTIVE' %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-secondary">{{ policy.status }}</span>{% endif %}</td>
+                    <td>
+                        <a href="/admin/policy/{{ policy.id }}/edit" class="btn btn-sm btn-primary"><i class="bi bi-pencil"></i></a>
+                        <form method="POST" action="/admin/policy/{{ policy.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete this policy?')">
+                            <button type="submit" class="btn btn-sm btn-danger"><i class="bi bi-trash"></i></button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
                 </tbody>
             </table>
         </div>
-        <p class="text-muted">Total: {{ policies|length }} policies</p>
         {% else %}
-        <div class="alert alert-info">
-            {% if search %}
-            No policies found matching "{{ search }}"
-            {% else %}
-            No policies in database
-            {% endif %}
-        </div>
+        <div class="alert alert-info">{% if search %}No policies found matching "{{ search }}"{% else %}No policies in database{% endif %}</div>
         {% endif %}
     </div>
-    
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

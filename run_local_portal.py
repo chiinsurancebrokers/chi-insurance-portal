@@ -1240,6 +1240,7 @@ def admin_policies():
         for policy in policies:
             policy_list.append({
                 'id': policy.id,
+                'policy_number': policy.policy_number,
                 'client_name': policy.client.name if policy.client else 'Unknown',
                 'policy_type': policy.policy_type,
                 'provider': policy.provider,
