@@ -1429,7 +1429,26 @@ def admin_delete_old_policies():
             policy_ids = [p.id for p in old_policies]
             
             if policy_ids:
-                # Delete payments first
+                # Find payment IDs for these policies
+                payments = db_session.query(Payment).filter(
+                    Payment.policy_id.in_(policy_ids)
+                ).all()
+                payment_ids = [p.id for p in payments]
+                
+                # Delete email_queue first (references payments)
+                if payment_ids:
+                    deleted_emails = db_session.query(EmailQueue).filter(
+                        EmailQueue.payment_id.in_(payment_ids)
+                    ).delete(synchronize_session='fetch')
+                else:
+                    deleted_emails = 0
+                
+                # Also delete email_queue by policy_id
+                db_session.query(EmailQueue).filter(
+                    EmailQueue.policy_id.in_(policy_ids)
+                ).delete(synchronize_session='fetch')
+                
+                # Delete payments
                 deleted_payments = db_session.query(Payment).filter(
                     Payment.policy_id.in_(policy_ids)
                 ).delete(synchronize_session='fetch')
@@ -1440,7 +1459,7 @@ def admin_delete_old_policies():
                 ).delete(synchronize_session='fetch')
                 
                 db_session.commit()
-                flash(f'Deleted {deleted_policies} policies and {deleted_payments} payments (expiring before {year})', 'success')
+                flash(f'Deleted {deleted_policies} policies, {deleted_payments} payments, {deleted_emails} queued emails (before {year})', 'success')
             else:
                 flash('No policies found before that date', 'info')
         except Exception as e:
