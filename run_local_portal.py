@@ -666,8 +666,8 @@ def generate_renewal_email(client, policy, payment, days_until, language, agent=
     if language == 'el':
         new_year_greeting = """
     <div style="background: linear-gradient(135deg, #1a237e 0%, #4a148c 100%); padding: 20px; border-radius: 10px; margin-bottom: 25px; text-align: center;">
-        <h2 style="color: #ffd700; margin: 0; font-size: 24px;">🎉 Καλή Χρονιά 2026! 🎉</h2>
-        <p style="color: #ffffff; margin: 10px 0 0 0;">Σας ευχόμαστε υγεία, ευτυχία και ευημερία!</p>
+        <h2 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: bold;">🎉 Καλή Χρονιά 2026! 🎉</h2>
+        <p style="color: #ffffff; margin: 10px 0 0 0; font-size: 14px;">Σας ευχόμαστε υγεία, ευτυχία και ευημερία!</p>
     </div>""" if show_new_year else ""
         
         subject = f"Ανανέωση Ασφαλιστηρίου - {policy.policy_type}"
