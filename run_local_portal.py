@@ -402,15 +402,28 @@ def admin_add_payment():
 @admin_required
 def admin_delete_payment(payment_id):
     db_session = get_session()
-    payment = db_session.query(Payment).get(payment_id)
-    
-    if payment:
+    try:
+        # Clear dependent email_queue rows first (FK constraint)
+        db_session.query(EmailQueue).filter_by(payment_id=payment_id).delete(synchronize_session='fetch')
+
+        payment = db_session.query(Payment).get(payment_id)
+        if not payment:
+            flash('Payment not found', 'danger')
+            db_session.commit()
+            return redirect(url_for('admin_payments'))
+
         db_session.delete(payment)
         db_session.commit()
         flash('Payment deleted successfully!', 'success')
-    
-    db_session.close()
-    return redirect(url_for('admin_payments'))
+        return redirect(url_for('admin_payments'))
+
+    except Exception as e:
+        db_session.rollback()
+        flash(f'Delete failed: {type(e).__name__}', 'danger')
+        return redirect(url_for('admin_payments'))
+
+    finally:
+        db_session.close()
 
 
 
