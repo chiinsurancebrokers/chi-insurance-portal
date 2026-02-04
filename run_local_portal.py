@@ -1927,3 +1927,44 @@ def admin_dashboard_safe():
             "error": str(e)
         }
         return render_template('admin/dashboard.html', stats=stats)
+
+# =========================
+# FIX: DELETE PAYMENT EVEN IF REFERENCED BY EMAIL_QUEUE
+# =========================
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
+
+@app.route("/admin/payment/<int:payment_id>/delete", methods=["POST"])
+@admin_required
+def admin_delete_payment(payment_id):
+    db_session = get_session()
+    try:
+        # remove dependent email queue rows first
+        db_session.execute(
+            text("DELETE FROM email_queue WHERE payment_id = :pid"),
+            {"pid": payment_id}
+        )
+
+        payment = db_session.query(Payment).get(payment_id)
+        if not payment:
+            flash("Payment not found", "danger")
+            db_session.commit()
+            return redirect(url_for("admin_payments"))
+
+        db_session.delete(payment)
+        db_session.commit()
+        flash("Payment deleted (email queue references removed).", "success")
+        return redirect(url_for("admin_payments"))
+
+    except IntegrityError:
+        db_session.rollback()
+        flash("Cannot delete payment due to database constraints.", "danger")
+        return redirect(url_for("admin_payments"))
+
+    except Exception as e:
+        db_session.rollback()
+        flash(f"Delete failed: {type(e).__name__}", "danger")
+        return redirect(url_for("admin_payments"))
+
+    finally:
+        db_session.close()
