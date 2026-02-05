@@ -444,9 +444,9 @@ def admin_renewals():
         
         # Filter by start_date (when payment is due)
         policies = db_session.query(Policy).filter(
-            Policy.start_date.between(today, future_date),
+            Policy.expiration_date.between(today, future_date),
             Policy.status == PolicyStatus.ACTIVE
-        ).order_by(Policy.start_date).all()
+        ).order_by(Policy.expiration_date).all()
         
         renewal_list = []
         for policy in policies:
@@ -461,7 +461,7 @@ def admin_renewals():
                 ).first()
                 
                 if payment:
-                    days_until = (policy.start_date - today).days
+                    days_until = (policy.expiration_date - today).days
                     
                     # Check if already queued
                     queued = db_session.query(EmailQueue).filter_by(
