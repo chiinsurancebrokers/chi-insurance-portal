@@ -1133,20 +1133,21 @@ def parse_csv_changes(filepath):
 
 
 
+
 def commit_csv_changes(changes):
     """Commit parsed changes to database"""
     from datetime import datetime
     db_session = get_session()
-    
+
     stats = {'new': 0, 'updated': 0, 'payments': 0, 'clients': 0}
-    
+
     try:
         # Create new clients
         for item in changes['new_clients']:
             client = Client(name=item['name'])
             db_session.add(client)
             db_session.flush()
-            
+
             policy = Policy(
                 client_id=client.id,
                 policy_number=item.get('policy_number'),
@@ -1160,20 +1161,20 @@ def commit_csv_changes(changes):
             )
             db_session.add(policy)
             db_session.flush()
-            
-            if item['expiry_date'] and item['premium']:
+
+            if item['premium']:
                 payment = Payment(
                     policy_id=policy.id,
                     amount=item['premium'],
-                    due_date=item['expiry_date'],
+                    due_date=item.get('start_date') or item['expiry_date'],  # ✅ FIXED
                     status=PaymentStatus.PENDING
                 )
                 db_session.add(payment)
                 stats['payments'] += 1
-            
+
             stats['clients'] += 1
             stats['new'] += 1
-        
+
         # Add new policies
         for item in changes['new_policies']:
             policy = Policy(
@@ -1189,19 +1190,19 @@ def commit_csv_changes(changes):
             )
             db_session.add(policy)
             db_session.flush()
-            
-            if item['expiry_date'] and item['premium']:
+
+            if item['premium']:
                 payment = Payment(
                     policy_id=policy.id,
                     amount=item['premium'],
-                    due_date=item['expiry_date'],
+                    due_date=item.get('start_date') or item['expiry_date'],  # ✅ FIXED
                     status=PaymentStatus.PENDING
                 )
                 db_session.add(payment)
                 stats['payments'] += 1
-            
+
             stats['new'] += 1
-        
+
         # Update existing policies
         for item in changes['updated_policies']:
             policy = db_session.query(Policy).get(item['policy_id'])
@@ -1210,39 +1211,37 @@ def commit_csv_changes(changes):
                 policy.policy_number = item.get('policy_number') or policy.policy_number
                 policy.start_date = item.get('new_start') or policy.start_date
                 policy.expiration_date = item['new_expiry']
-                
-                # Update or create payment
+
                 payment = db_session.query(Payment).filter_by(
                     policy_id=policy.id,
                     status=PaymentStatus.PENDING
                 ).first()
-                
+
                 if payment:
                     payment.amount = item['new_premium']
-                    payment.due_date = item['new_expiry']
+                    payment.due_date = item.get('new_start') or item['new_expiry']  # ✅ FIXED
                 else:
                     payment = Payment(
                         policy_id=policy.id,
                         amount=item['new_premium'],
-                        due_date=item['new_expiry'],
+                        due_date=item.get('new_start') or item['new_expiry'],  # ✅ FIXED
                         status=PaymentStatus.PENDING
                     )
                     db_session.add(payment)
                     stats['payments'] += 1
-                
+
                 stats['updated'] += 1
-        
+
         db_session.commit()
+
     except Exception as e:
         db_session.rollback()
         raise e
+
     finally:
         db_session.close()
-    
+
     return stats
-
-
-
 @app.route('/admin/policies')
 @admin_required
 def admin_policies():
