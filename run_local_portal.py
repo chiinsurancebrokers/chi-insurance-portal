@@ -429,58 +429,51 @@ def admin_delete_payment(payment_id):
 
 
 
-@app.route('/admin/renewals')
+@app.route('/admin/renewals-v2', endpoint='admin_renewals_v2')
 @admin_required
 def admin_renewals():
-    """Show upcoming renewals and queue emails"""
+    """Show upcoming renewals (by expiry date) and queue emails."""
     from datetime import timedelta
     db_session = get_session()
-    
+
     try:
         today = datetime.now().date()
-        # Get days filter from query param (default 30 days)
         days_ahead = request.args.get('days', 30, type=int)
         future_date = today + timedelta(days=days_ahead)
-        
-        # Filter by start_date (when payment is due)
-        policies = db_session.query(Policy).filter(
-            Policy.start_date.between(today, future_date),
-            Policy.status == PolicyStatus.ACTIVE
-        ).order_by(Policy.start_date).all()
-        
+
+        # IMPORTANT: Renewals must be based on EXPIRY date (payment.expiry_date)
+        rows = (
+            db_session.query(Policy, Client, Payment)
+            .join(Client, Policy.client_id == Client.id)
+            .join(Payment, Payment.policy_id == Policy.id)
+            .filter(Payment.expiry_date.isnot(None))
+            .filter(Payment.expiry_date >= today)
+            .filter(Payment.expiry_date <= future_date)
+            .order_by(Payment.expiry_date.asc())
+            .all()
+        )
+
         renewal_list = []
-        for policy in policies:
-            try:
-                client = policy.client
-                if not client:
-                    continue
-                
-                payment = db_session.query(Payment).filter_by(
-                    policy_id=policy.id,
-                    status=PaymentStatus.PENDING
-                ).first()
-                
-                if payment:
-                    days_until = (policy.start_date - today).days
-                    
-                    # Check if already queued
-                    queued = db_session.query(EmailQueue).filter_by(
-                        policy_id=policy.id,
-                        payment_id=payment.id
-                    ).first()
-                    
-                    renewal_list.append({
-                        'client': client,
-                        'policy': policy,
-                        'payment': payment,
-                        'days_until': days_until,
-                        'queued': queued is not None,
-                        'sent': queued.status == EmailStatus.SENT if queued else False
-                    })
-            except Exception:
-                continue
-        
-        return render_template('admin/renewals.html', renewals=renewal_list)
+        for policy, client, payment in rows:
+            expiry = payment.expiry_date
+
+            queued = db_session.query(EmailQueue).filter_by(
+                policy_id=policy.id,
+                payment_id=payment.id
+            ).first()
+
+            days_until = (expiry - today).days
+            renewal_list.append({
+                'client': client,
+                'policy': policy,
+                'payment': payment,
+                'days_until': days_until,
+                'queued': queued is not None,
+                'sent': queued.status == EmailStatus.SENT if queued else False
+            })
+
+        return render_template('admin/renewals.html', renewals=renewal_list, days=days_ahead)
+
     finally:
         db_session.close()
 
@@ -1946,4 +1939,67 @@ def admin_dashboard_safe():
 # =========================
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
+
+
+# =========================
+# Local runner
+# =========================
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", "5000"))
+    app.run(debug=True, host="0.0.0.0", port=port)
+
+@app.route('/admin/renewals')
+@admin_required
+def admin_renewals_v2():
+    """Show upcoming renewals based on PAYMENT due_date"""
+    from datetime import datetime, timedelta
+    db_session = get_session()
+
+    try:
+        today = datetime.now().date()
+        days_ahead = request.args.get('days', 30, type=int)
+        future_date = today + timedelta(days=days_ahead)
+
+        query = (
+            db_session.query(Policy, Payment)
+            .join(Payment, Payment.policy_id == Policy.id)
+            .filter(
+                Policy.status == PolicyStatus.ACTIVE,
+                Payment.status == PaymentStatus.PENDING,
+                Payment.due_date != None,
+                Payment.due_date.between(today, future_date)
+            )
+            .order_by(Payment.due_date.asc())
+        )
+
+        renewal_list = []
+
+        for policy, payment in query.all():
+            try:
+                client = policy.client
+                if not client:
+                    continue
+
+                queued = db_session.query(EmailQueue).filter_by(
+                    policy_id=policy.id,
+                    payment_id=payment.id
+                ).first()
+
+                days_until = (payment.due_date - today).days if payment.due_date else 0
+
+                renewal_list.append({
+                    'client': client,
+                    'policy': policy,
+                    'payment': payment,
+                    'days_until': days_until,
+                    'queued': queued is not None,
+                    'sent': queued.status == EmailStatus.SENT if queued else False
+                })
+            except Exception:
+                continue
+
+        return render_template('admin/renewals.html', renewals=renewal_list)
+
+    finally:
+        db_session.close()
 
