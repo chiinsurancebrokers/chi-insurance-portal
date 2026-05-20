@@ -71,6 +71,8 @@ class Policy(Base):
     expiration_date = Column(Date)
     status = Column(SQLEnum(PolicyStatus), default=PolicyStatus.ACTIVE)
     created_date = Column(DateTime, default=datetime.now)
+    agent = Column(String(10), default='3p')  # Agent: 3p, ca, bu
+    payment_code = Column(String(50))  # RF payment code for BU policies
     
     client = relationship('Client', back_populates='policies')
     payments = relationship('Payment', back_populates='policy', cascade='all, delete-orphan')
