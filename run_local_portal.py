@@ -487,7 +487,7 @@ def admin_renewals():
 @app.route('/admin/renewals/queue', methods=['POST'])
 @admin_required
 def admin_queue_emails():
-    """Queue selected emails with agent selection (3P or CA)"""
+    """Queue selected emails with agent selection (3P, CA, or BU)"""
     selected_ids = request.form.getlist('selected')
     
     if not selected_ids:
@@ -496,6 +496,7 @@ def admin_queue_emails():
     
     db_session = get_session()
     queued_count = 0
+    skipped_bu = 0  # Count BU policies without RF codes
     
     try:
         for policy_id in selected_ids:
@@ -521,13 +522,18 @@ def admin_queue_emails():
             if existing:
                 continue
             
-            # Get agent selection for this policy (3p or ca)
-            agent = request.form.get(f'agent_{policy_id}', '3p')
+            # Get agent: prefer policy.agent, fall back to form selection
+            agent = getattr(policy, 'agent', None) or request.form.get(f'agent_{policy_id}', '3p')
+            
+            # For BU policies, check if RF code is set
+            if agent == 'bu' and not getattr(policy, 'payment_code', None):
+                skipped_bu += 1
+                continue  # Skip BU policies without RF codes
             
             # Generate email content with agent bank accounts
             has_greek = any(ord(char) > 127 for char in client.name)
             language = 'el' if has_greek else 'en'
-            days_until = (policy.start_date - datetime.now().date()).days if policy.start_date else (payment.due_date - datetime.now().date()).days
+            days_until = (policy.expiration_date - datetime.now().date()).days if policy.expiration_date else (payment.due_date - datetime.now().date()).days
             
             subject, body = generate_renewal_email(client, policy, payment, days_until, language, agent)
             
@@ -546,7 +552,12 @@ def admin_queue_emails():
             queued_count += 1
         
         db_session.commit()
-        flash(f'Queued {queued_count} emails', 'success')
+        msg = f'Queued {queued_count} emails'
+        if skipped_bu > 0:
+            msg += f' (Skipped {skipped_bu} BU policies without RF codes)'
+            flash(msg, 'warning')
+        else:
+            flash(msg, 'success')
     except Exception as e:
         db_session.rollback()
         flash(f'Error: {str(e)}', 'danger')
@@ -645,14 +656,14 @@ def admin_send_email(email_id):
     return redirect(url_for("admin_email_queue"))
 
 def generate_renewal_email(client, policy, payment, days_until, language, agent='3p'):
-    """Generate email subject and body with bank accounts based on agent (3p or ca)"""
+    """Generate email subject and body with bank accounts based on agent (3p, ca, or bu)"""
     from datetime import date
     
     # Seasonal greeting (Happy New Year until Feb 1st)
     today = date.today()
     show_new_year = today.month == 1 or (today.month == 2 and today.day == 1)
     
-    # Bank accounts based on agent selection
+    # Payment info based on agent selection
     if agent == '3p':
         bank_info = """
     <h3 style="color: #1976d2;">Τραπεζικοί Λογαριασμοί</h3>
@@ -663,7 +674,7 @@ def generate_renewal_email(client, policy, payment, days_until, language, agent=
         <tr style="background: #f5f5f5;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>EUROBANK</strong></td><td style="padding: 8px; border: 1px solid #ddd;">GR3302602210000370200676490</td></tr>
         <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>ΠΕΙΡΑΙΩΣ</strong></td><td style="padding: 8px; border: 1px solid #ddd;">GR6201720890005089072164520</td></tr>
     </table>"""
-    else:
+    elif agent == 'ca':
         bank_info = """
     <h3 style="color: #1976d2;">Τραπεζικοί Λογαριασμοί</h3>
     <p style="font-size: 13px; color: #555;"><strong>ΔΙΚΑΙΟΥΧΟΣ: CA Insurance Agents - ΑΦΜ 800338387</strong></p>
@@ -672,6 +683,24 @@ def generate_renewal_email(client, policy, payment, days_until, language, agent=
         <tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>EUROBANK</strong></td><td style="padding: 8px; border: 1px solid #ddd;">GR6802600270000300201693054</td></tr>
         <tr style="background: #f5f5f5;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>ΕΘΝΙΚΗ ΤΡΑΠΕΖΑ</strong></td><td style="padding: 8px; border: 1px solid #ddd;">GR7301106690000066900657306</td></tr>
     </table>"""
+    elif agent == 'bu':
+        # Brokers Union uses RF payment codes
+        rf_code = getattr(policy, 'payment_code', None) or ''
+        if rf_code:
+            bank_info = f"""
+    <h3 style="color: #1976d2;">Κωδικός Πληρωμής RF</h3>
+    <p style="font-size: 13px; color: #555;"><strong>BROKERS UNION Α.Ε. - ΑΦΜ 800319742</strong></p>
+    <div style="background: #e3f2fd; padding: 20px; border-radius: 8px; text-align: center; margin: 15px 0;">
+        <p style="margin: 0 0 10px 0; font-size: 14px; color: #666;">Κωδικός RF για πληρωμή σε οποιαδήποτε τράπεζα:</p>
+        <p style="margin: 0; font-size: 24px; font-weight: bold; color: #1565c0; letter-spacing: 1px; font-family: monospace;">{rf_code}</p>
+    </div>
+    <p style="font-size: 12px; color: #666; text-align: center;"><em>Χρησιμοποιήστε τον παραπάνω κωδικό RF για πληρωμή μέσω e-banking ή στο ταμείο οποιασδήποτε τράπεζας.</em></p>"""
+        else:
+            bank_info = """
+    <h3 style="color: #d32f2f;">⚠️ Πληρωμή</h3>
+    <p style="color: #d32f2f;"><strong>Παρακαλούμε επικοινωνήστε μαζί μας για τον κωδικό πληρωμής RF.</strong></p>"""
+    else:
+        bank_info = ""
     
     # Get start date
     start_date_str = policy.start_date.strftime('%d/%m/%Y') if policy.start_date else payment.due_date.strftime('%d/%m/%Y')
@@ -846,6 +875,11 @@ def admin_csv_upload():
             flash('Only CSV files allowed', 'danger')
             return redirect(request.url)
         
+        # Get selected agent
+        agent = request.form.get('agent', '3p')
+        if agent not in ['3p', 'ca', 'bu']:
+            agent = '3p'
+        
         # Save file temporarily
         import tempfile
         import os
@@ -854,10 +888,11 @@ def admin_csv_upload():
         
         # Parse and preview changes
         try:
-            changes = parse_csv_changes(temp_path)
+            changes = parse_csv_changes(temp_path, agent)
             session['csv_temp_path'] = temp_path
             session['csv_filename'] = file.filename
-            return render_template('admin/csv_preview.html', changes=changes, filename=file.filename)
+            session['csv_agent'] = agent
+            return render_template('admin/csv_preview.html', changes=changes, filename=file.filename, agent=agent)
         except Exception as e:
             flash(f'Error parsing CSV: {str(e)}', 'danger')
             return redirect(request.url)
@@ -870,16 +905,18 @@ def admin_csv_commit():
     """Commit CSV changes to database"""
     temp_path = session.get('csv_temp_path')
     filename = session.get('csv_filename')
+    agent = session.get('csv_agent', '3p')
     
     if not temp_path:
         flash('No CSV data to commit', 'danger')
         return redirect(url_for('admin_csv_upload'))
     
     try:
-        changes = parse_csv_changes(temp_path)
-        result = commit_csv_changes(changes)
+        changes = parse_csv_changes(temp_path, agent)
+        result = commit_csv_changes(changes, agent)
         
-        flash(f'Success! Added {result["new"]} policies, Updated {result["updated"]}, Created {result["payments"]} payments', 'success')
+        agent_name = {'3p': '3P Insurance', 'ca': 'CA Insurance', 'bu': 'Brokers Union'}.get(agent, agent)
+        flash(f'Success! ({agent_name}) Added {result["new"]} policies, Updated {result["updated"]}, Created {result["payments"]} payments', 'success')
         
         # Clean up
         import os
@@ -887,6 +924,7 @@ def admin_csv_commit():
             os.remove(temp_path)
         session.pop('csv_temp_path', None)
         session.pop('csv_filename', None)
+        session.pop('csv_agent', None)
         
     except Exception as e:
         flash(f'Error committing changes: {str(e)}', 'danger')
@@ -894,7 +932,7 @@ def admin_csv_commit():
     return redirect(url_for('admin_csv_upload'))
 
 
-def parse_csv_changes(filepath):
+def parse_csv_changes(filepath, agent='3p'):
     """Parse CSV file - Production Report format from Greek insurance system"""
     from datetime import datetime
     
@@ -917,25 +955,34 @@ def parse_csv_changes(filepath):
     
     lines = [l for l in file_content.split('\n') if l.strip()]
     
-    # Find header row (skip title rows like "Παραγωγή;;;;;;")
+    # Find header row - different for BU vs 3P/CA
     header_idx = 0
-    for i, line in enumerate(lines):
-        if 'Πελάτης' in line and 'Κλάδος' in line:
-            header_idx = i
-            break
+    if agent == 'bu':
+        # BU format: look for Χαρακτ/κό or Πελάτης
+        for i, line in enumerate(lines):
+            if ('Πελάτης' in line and 'Συμβόλαιο' in line) or ('Χαρακτ/κό' in line):
+                header_idx = i
+                break
+    else:
+        # 3P/CA format
+        for i, line in enumerate(lines):
+            if 'Πελάτης' in line and 'Κλάδος' in line:
+                header_idx = i
+                break
     
     header_line = lines[header_idx]
     delimiter = ';'
     headers = [h.strip().strip('"') for h in header_line.split(delimiter)]
     
-    print(f'DEBUG: Header found at line {header_idx + 1}')
+    print(f'DEBUG: Agent={agent}, Header found at line {header_idx + 1}')
     print(f'DEBUG: Headers: {headers[:8]}')
     
     changes = {
         'new_policies': [],
         'updated_policies': [],
         'unchanged': [],
-        'new_clients': []
+        'new_clients': [],
+        'agent': agent
     }
     
     # Parse data rows
@@ -1134,7 +1181,7 @@ def parse_csv_changes(filepath):
 
 
 
-def commit_csv_changes(changes):
+def commit_csv_changes(changes, agent='3p'):
     """Commit parsed changes to database"""
     from datetime import datetime
     db_session = get_session()
@@ -1157,7 +1204,8 @@ def commit_csv_changes(changes):
                 premium=item['premium'],
                 expiration_date=item['expiry_date'],
                 start_date=item.get('start_date') or datetime.now().date(),
-                status=PolicyStatus.ACTIVE
+                status=PolicyStatus.ACTIVE,
+                agent=agent  # Set agent from upload
             )
             db_session.add(policy)
             db_session.flush()
@@ -1186,7 +1234,8 @@ def commit_csv_changes(changes):
                 premium=item['premium'],
                 expiration_date=item['expiry_date'],
                 start_date=item.get('start_date') or datetime.now().date(),
-                status=PolicyStatus.ACTIVE
+                status=PolicyStatus.ACTIVE,
+                agent=agent  # Set agent from upload
             )
             db_session.add(policy)
             db_session.flush()
@@ -1211,6 +1260,7 @@ def commit_csv_changes(changes):
                 policy.policy_number = item.get('policy_number') or policy.policy_number
                 policy.start_date = item.get('new_start') or policy.start_date
                 policy.expiration_date = item['new_expiry']
+                policy.agent = agent  # Update agent on existing policies too
 
                 payment = db_session.query(Payment).filter_by(
                     policy_id=policy.id,
@@ -1295,6 +1345,15 @@ def admin_edit_policy(policy_id):
             policy.policy_type = request.form.get('policy_type')
             policy.provider = request.form.get('provider')
             policy.license_plate = request.form.get('license_plate') or None
+            
+            # Agent selection
+            agent = request.form.get('agent', '3p')
+            if agent in ['3p', 'ca', 'bu']:
+                policy.agent = agent
+            
+            # RF Payment code (for BU)
+            payment_code = request.form.get('payment_code', '').strip()
+            policy.payment_code = payment_code if payment_code else None
             
             premium_str = request.form.get('premium', '0').replace(',', '.')
             try:
@@ -1945,4 +2004,3 @@ def admin_dashboard_safe():
 # =========================
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
-
