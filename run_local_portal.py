@@ -2051,3 +2051,81 @@ def admin_dashboard_safe():
 # =========================
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
+
+# ══════════════════════════════════════════════════════════════════════════════
+# HAL DASHBOARD — JSON STATS ENDPOINT
+# No session required — authenticated by HAL_STATS_KEY env var
+# Add HAL_STATS_KEY to Railway environment variables
+# ══════════════════════════════════════════════════════════════════════════════
+@app.route('/api/hal/stats')
+def hal_stats():
+    """
+    JSON stats endpoint for HAL Dashboard integration.
+    Auth: ?key=HAL_STATS_KEY (set in Railway env vars)
+    """
+    from datetime import timedelta
+    from flask import jsonify
+
+    expected_key = os.getenv('HAL_STATS_KEY', '')
+    provided_key = request.args.get('key', '')
+
+    if not expected_key or provided_key != expected_key:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    db_session = get_session()
+    try:
+        from datetime import date as _date
+        today = _date.today()
+        thirty_days = today + timedelta(days=30)
+        seven_days  = today + timedelta(days=7)
+
+        total_clients    = db_session.query(Client).count()
+        active_policies  = db_session.query(Policy).filter_by(status=PolicyStatus.ACTIVE).count()
+        pending_payments = db_session.query(Payment).filter_by(status=PaymentStatus.PENDING).count()
+        overdue_payments = db_session.query(Payment).filter_by(status=PaymentStatus.OVERDUE).count()
+
+        expiring_30 = db_session.query(Policy).filter(
+            Policy.expiration_date.between(today, thirty_days),
+            Policy.status == PolicyStatus.ACTIVE
+        ).count()
+
+        expiring_7 = db_session.query(Policy).filter(
+            Policy.expiration_date.between(today, seven_days),
+            Policy.status == PolicyStatus.ACTIVE
+        ).count()
+
+        # Most urgent renewals (next 7 days)
+        urgent_policies = db_session.query(Policy).filter(
+            Policy.expiration_date.between(today, seven_days),
+            Policy.status == PolicyStatus.ACTIVE
+        ).order_by(Policy.expiration_date).limit(10).all()
+
+        urgent_list = []
+        for p in urgent_policies:
+            client = db_session.query(Client).get(p.client_id)
+            urgent_list.append({
+                'client': client.name if client else '—',
+                'policy_type': p.policy_type or '—',
+                'provider': p.provider or '—',
+                'expires': p.expiration_date.strftime('%d/%m/%Y') if p.expiration_date else '—',
+                'premium': float(p.premium) if p.premium else 0,
+                'email': client.email if client else '—',
+            })
+
+        return jsonify({
+            'stats': {
+                'total_clients':    total_clients,
+                'active_policies':  active_policies,
+                'pending_payments': pending_payments,
+                'overdue_payments': overdue_payments,
+                'expiring_30_days': expiring_30,
+                'expiring_7_days':  expiring_7,
+            },
+            'urgent_renewals': urgent_list,
+            'generated_at': today.strftime('%d/%m/%Y'),
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        db_session.close()
