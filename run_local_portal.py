@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 import os
 
@@ -1697,9 +1697,6 @@ def admin_clear_all_data():
     """
 
 
-if __name__ == '__main__':
-    port = int(os.getenv('PORT', 5000))
-
 # =========================
 # ADMIN PASSWORD LOGIN (TEMP)
 # =========================
@@ -1729,8 +1726,9 @@ def admin_login_password_v2():
 
 @app.route("/admin-logout")
 def admin_logout():
-
-    app.run(debug=False, host='0.0.0.0', port=port)
+    session.clear()
+    logout_user()
+    return redirect(url_for("login"))
 
 @app.route('/admin/client/<int:client_id>/edit', methods=['GET', 'POST'])
 @admin_required
@@ -2129,3 +2127,90 @@ def hal_stats():
         return jsonify({'error': str(e)}), 500
     finally:
         db_session.close()
+
+# =========================
+# API RENEWALS ENDPOINT
+# =========================
+@app.route('/api/renewals')
+def api_renewals():
+    """
+    JSON endpoint for renewals.
+
+    Usage:
+        /api/renewals
+        /api/renewals?days=30
+        /api/renewals?days=90
+    """
+
+    db_session = get_session()
+
+    try:
+        today = datetime.now().date()
+        days = request.args.get('days', 90, type=int)
+        cutoff_date = today + timedelta(days=days)
+
+        policies = (
+            db_session.query(Policy)
+            .filter(
+                Policy.expiration_date >= today,
+                Policy.expiration_date <= cutoff_date,
+                Policy.status == PolicyStatus.ACTIVE
+            )
+            .order_by(Policy.expiration_date.asc())
+            .all()
+        )
+
+        renewals = []
+
+        for policy in policies:
+            client = (
+                db_session.query(Client)
+                .filter(Client.id == policy.client_id)
+                .first()
+            )
+
+            days_left = None
+            if policy.expiration_date:
+                days_left = (policy.expiration_date - today).days
+
+            renewals.append({
+                "policy_id": policy.id,
+                "policy_number": policy.policy_number,
+                "policy_type": policy.policy_type,
+                "provider": policy.provider,
+                "license_plate": getattr(policy, "license_plate", None),
+                "premium": float(policy.premium) if policy.premium else 0,
+                "start_date": policy.start_date.isoformat() if policy.start_date else None,
+                "expiration_date": policy.expiration_date.isoformat() if policy.expiration_date else None,
+                "days_left": days_left,
+                "status": policy.status.value if policy.status else None,
+                "agent": getattr(policy, "agent", None),
+                "payment_code": getattr(policy, "payment_code", None),
+                "client": {
+                    "id": client.id if client else None,
+                    "name": client.name if client else None,
+                    "email": client.email if client else None,
+                    "phone": client.phone if client else None
+                }
+            })
+
+        return jsonify({
+            "success": True,
+            "count": len(renewals),
+            "days": days,
+            "renewals": renewals
+        })
+
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+    finally:
+        db_session.close()
+
+
+if __name__ == '__main__':
+    port = int(os.getenv('PORT', 5000))
+    app.run(debug=False, host='0.0.0.0', port=port)
